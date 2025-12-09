@@ -1,43 +1,10 @@
 /**
- * Chat Module
- * Chat interface, tab management, and settings modal
+ * Chat API Module
+ * LLM chat integration with tool calling support
  */
 
 // ============================================
-// Tab Management
-// ============================================
-function initTabHandler() {
-  elements.tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tabName = btn.dataset.tab;
-      switchTab(tabName);
-    });
-  });
-}
-
-function switchTab(tabName) {
-  elements.tabBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabName);
-  });
-
-  elements.tabContents.forEach(content => {
-    const contentTabName = content.id.replace('-tab', '');
-    const isActive = contentTabName === tabName;
-
-    content.classList.toggle('active', isActive);
-
-    if (isActive) {
-      content.classList.remove('hidden');
-      content.classList.add('flex');
-    } else {
-      content.classList.add('hidden');
-      content.classList.remove('flex');
-    }
-  });
-}
-
-// ============================================
-// Chat Handler
+// Chat Handler Initialization
 // ============================================
 function initChatHandler() {
   elements.chatSendBtn.addEventListener('click', sendChatMessage);
@@ -61,6 +28,9 @@ function initChatHandler() {
   initSettingsModal();
 }
 
+// ============================================
+// Send Message
+// ============================================
 async function sendChatMessage() {
   const message = elements.chatInput.value.trim();
   if (!message) return;
@@ -86,12 +56,15 @@ async function sendChatMessage() {
   elements.chatInput.value = '';
   elements.chatInput.style.height = 'auto';
 
-  log('info', `Chat message sent: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
+  log('info', `Chat message sent: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''} `);
 
   // Call LLM API
   await callChatAPI();
 }
 
+// ============================================
+// API Calls
+// ============================================
 async function callChatAPI() {
   const { baseUrl, token, model, systemPrompt, maxHistory } = state.chatSettings;
 
@@ -125,8 +98,8 @@ async function callChatAPI() {
     }
 
   } catch (error) {
-    log('error', `Chat API error: ${error.message}`);
-    updateAssistantMessage(assistantDiv, `Error: ${error.message}`, true);
+    log('error', `Chat API error: ${error.message} `);
+    updateAssistantMessage(assistantDiv, `Error: ${error.message} `, true);
   } finally {
     state.isGenerating = false;
     elements.chatSendBtn.disabled = false;
@@ -139,7 +112,7 @@ async function sendChatRequest(baseUrl, token, model, messages, tools, assistant
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers['Authorization'] = `Bearer ${token} `;
   }
 
   const body = {
@@ -239,6 +212,9 @@ async function sendChatRequest(baseUrl, token, model, messages, tools, assistant
   return { content: '' };
 }
 
+// ============================================
+// Tool Execution
+// ============================================
 async function executeToolForChat(toolName, args) {
   // Use the existing MCP sendRequest function
   return new Promise((resolve, reject) => {
@@ -276,7 +252,7 @@ async function executeToolForChat(toolName, args) {
     });
 
     state.websocket.send(JSON.stringify(request));
-    log('sent', `→ tools/call: ${toolName} (id: ${id})`);
+    log('sent', `→ tools / call: ${toolName} (id: ${id})`);
   });
 }
 
@@ -317,6 +293,9 @@ function buildToolsForAPI() {
   }];
 }
 
+// ============================================
+// Message UI
+// ============================================
 function createAssistantMessageDiv() {
   const emptyState = elements.chatBody.querySelector('.empty-state');
   if (emptyState) {
@@ -334,9 +313,71 @@ function createAssistantMessageDiv() {
 
 function updateAssistantMessage(div, content, isError = false) {
   if (isError) {
-    div.className = 'chat-message max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed self-start bg-red-500/10 text-red-400 border border-red-500/20 rounded-bl-sm whitespace-pre-wrap';
+    div.className = 'chat-message-wrapper max-w-[80%] self-start';
+    div.innerHTML = `
+      <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed bg-red-500/10 text-red-400 border border-red-500/20 rounded-bl-sm whitespace-pre-wrap">${escapeHtml(content)}</div>
+    `;
+  } else {
+    div.className = 'chat-message-wrapper max-w-[80%] self-start';
+    div.innerHTML = `
+      <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed bg-[#1c1c26] text-zinc-200 border border-white/10 rounded-bl-sm whitespace-pre-wrap">${escapeHtml(content)}</div>
+      <div class="speak-controls">
+        <select class="tts-voice-select" onchange="setTtsVoice(this.value)" title="Select voice">
+          ${getVoiceOptionsHtml()}
+        </select>
+        <button class="speak-btn" title="Speak message" data-speak-text="${escapeHtml(content)}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+        <button class="copy-btn" title="Copy to clipboard" data-copy-text="${escapeHtml(content)}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+`;
+    // Add event listener to the speak button
+    const speakBtn = div.querySelector('.speak-btn');
+    if (speakBtn) {
+      speakBtn.addEventListener('click', function () {
+        const text = this.getAttribute('data-speak-text');
+        speakText(text, this);
+      });
+    }
+
+    // Add event listener to the copy button
+    const copyBtn = div.querySelector('.copy-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async function () {
+        const text = this.getAttribute('data-copy-text');
+        try {
+          await navigator.clipboard.writeText(text);
+
+          // Visual feedback - show checkmark icon
+          const originalHTML = this.innerHTML;
+          this.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          `;
+          this.classList.add('copied');
+
+          // Reset after 2 seconds
+          setTimeout(() => {
+            this.innerHTML = originalHTML;
+            this.classList.remove('copied');
+          }, 2000);
+
+          log('success', 'Copied to clipboard');
+        } catch (err) {
+          log('error', 'Failed to copy to clipboard');
+          console.error('Copy failed:', err);
+        }
+      });
+    }
   }
-  div.textContent = content;
   elements.chatBody.scrollTop = elements.chatBody.scrollHeight;
 }
 
@@ -358,6 +399,9 @@ function addChatMessage(content, role) {
   elements.chatBody.scrollTop = elements.chatBody.scrollHeight;
 }
 
+// ============================================
+// Chat History
+// ============================================
 function clearChat() {
   state.chatHistory = [];
   elements.chatBody.innerHTML = `
@@ -375,213 +419,4 @@ function getRecentHistory(maxMessages) {
   }
   // Keep the most recent messages
   return state.chatHistory.slice(-maxMessages);
-}
-
-// ============================================
-// Settings Modal
-// ============================================
-function initSettingsModal() {
-  elements.settingsModal = document.getElementById('settings-modal');
-
-  // Close on backdrop click
-  elements.settingsModal?.addEventListener('click', (e) => {
-    if (e.target === elements.settingsModal) {
-      closeSettingsModal();
-    }
-  });
-
-  // Close on Escape key
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && elements.settingsModal && !elements.settingsModal.classList.contains('hidden')) {
-      closeSettingsModal();
-    }
-  });
-}
-
-function openSettingsModal() {
-  if (!elements.settingsModal) return;
-
-  // Populate form with current settings
-  const baseUrlInput = document.getElementById('settings-base-url');
-  const tokenInput = document.getElementById('settings-token');
-  const modelSelect = document.getElementById('settings-model');
-  const systemPromptInput = document.getElementById('settings-system-prompt');
-  const maxHistoryInput = document.getElementById('settings-max-history');
-
-  if (baseUrlInput) baseUrlInput.value = state.chatSettings.baseUrl;
-  if (tokenInput) tokenInput.value = state.chatSettings.token;
-  if (systemPromptInput) systemPromptInput.value = state.chatSettings.systemPrompt;
-  if (maxHistoryInput) maxHistoryInput.value = state.chatSettings.maxHistory || 20;
-
-  // Populate models if available
-  if (modelSelect && state.chatSettings.availableModels.length > 0) {
-    populateModelSelect(state.chatSettings.availableModels, state.chatSettings.model);
-  }
-
-  // Set tool mode radio
-  const toolMode = state.chatSettings.toolMode || 'selected';
-  document.getElementById('tool-mode-selected').checked = toolMode === 'selected';
-  document.getElementById('tool-mode-custom').checked = toolMode === 'custom';
-
-  // Populate and show/hide custom tools panel
-  populateCustomToolsList();
-  toggleCustomToolsPanel();
-
-  elements.settingsModal.classList.remove('hidden');
-  elements.settingsModal.classList.add('flex');
-
-  log('info', 'Settings modal opened');
-}
-
-function closeSettingsModal() {
-  if (!elements.settingsModal) return;
-
-  elements.settingsModal.classList.add('hidden');
-  elements.settingsModal.classList.remove('flex');
-}
-
-function saveSettings() {
-  const baseUrlInput = document.getElementById('settings-base-url');
-  const tokenInput = document.getElementById('settings-token');
-  const modelSelect = document.getElementById('settings-model');
-  const systemPromptInput = document.getElementById('settings-system-prompt');
-  const maxHistoryInput = document.getElementById('settings-max-history');
-
-  state.chatSettings.baseUrl = baseUrlInput?.value.trim() || '';
-  state.chatSettings.token = tokenInput?.value.trim() || '';
-  state.chatSettings.model = modelSelect?.value || '';
-  state.chatSettings.systemPrompt = systemPromptInput?.value || '';
-  state.chatSettings.maxHistory = parseInt(maxHistoryInput?.value) || 20;
-
-  // Save tool mode and custom tools
-  state.chatSettings.toolMode = document.getElementById('tool-mode-custom').checked ? 'custom' : 'selected';
-  state.chatSettings.customTools = getSelectedCustomTools();
-
-  saveChatSettings();
-  closeSettingsModal();
-
-  log('success', 'Settings saved');
-}
-
-function toggleCustomToolsPanel() {
-  const panel = document.getElementById('custom-tools-panel');
-  const isCustomMode = document.getElementById('tool-mode-custom').checked;
-
-  if (panel) {
-    if (isCustomMode) {
-      panel.classList.remove('hidden');
-    } else {
-      panel.classList.add('hidden');
-    }
-  }
-}
-
-function populateCustomToolsList() {
-  const listEl = document.getElementById('custom-tools-list');
-  if (!listEl) return;
-
-  if (state.tools.length === 0) {
-    listEl.innerHTML = '<p class="text-xs text-zinc-500 italic">Connect to MCP to see available tools</p>';
-    return;
-  }
-
-  const savedCustomTools = state.chatSettings.customTools || [];
-
-  listEl.innerHTML = state.tools.map(tool => `
-    <label class="flex items-center gap-2 p-1 rounded hover:bg-white/5 cursor-pointer">
-      <input type="checkbox" value="${tool.name}" 
-        ${savedCustomTools.includes(tool.name) ? 'checked' : ''}
-        class="custom-tool-checkbox w-4 h-4 accent-indigo-500">
-      <span class="text-sm text-zinc-300">${formatToolName(tool.name)}</span>
-      <span class="text-xs text-zinc-500">(${tool.name})</span>
-    </label>
-  `).join('');
-}
-
-function getSelectedCustomTools() {
-  const checkboxes = document.querySelectorAll('.custom-tool-checkbox:checked');
-  return Array.from(checkboxes).map(cb => cb.value);
-}
-
-async function fetchModels() {
-  const baseUrlInput = document.getElementById('settings-base-url');
-  const tokenInput = document.getElementById('settings-token');
-  const modelSelect = document.getElementById('settings-model');
-  const fetchBtn = document.getElementById('settings-fetch-models-btn');
-
-  const baseUrl = baseUrlInput?.value.trim();
-  const token = tokenInput?.value.trim();
-
-  if (!baseUrl) {
-    log('error', 'Please enter a Base URL first');
-    return;
-  }
-
-  // Show loading state
-  if (fetchBtn) {
-    fetchBtn.disabled = true;
-    fetchBtn.innerHTML = `
-      <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-    `;
-  }
-
-  try {
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(`${baseUrl}/models`, {
-      method: 'GET',
-      headers: headers
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    // Handle OpenAI-style response
-    const models = data.data || data.models || data || [];
-    const modelIds = Array.isArray(models)
-      ? models.map(m => typeof m === 'string' ? m : m.id || m.name)
-      : [];
-
-    if (modelIds.length === 0) {
-      log('warning', 'No models found');
-      return;
-    }
-
-    state.chatSettings.availableModels = modelIds;
-    populateModelSelect(modelIds, state.chatSettings.model);
-
-    log('success', `Found ${modelIds.length} model(s)`);
-
-  } catch (error) {
-    log('error', `Failed to fetch models: ${error.message}`);
-  } finally {
-    if (fetchBtn) {
-      fetchBtn.disabled = false;
-      fetchBtn.textContent = 'Get Models';
-    }
-  }
-}
-
-function populateModelSelect(models, selectedModel) {
-  const modelSelect = document.getElementById('settings-model');
-  if (!modelSelect) return;
-
-  modelSelect.innerHTML = `
-    <option value="">Select a model...</option>
-    ${models.map(model => `
-      <option value="${model}" ${model === selectedModel ? 'selected' : ''}>${model}</option>
-    `).join('')}
-  `;
 }

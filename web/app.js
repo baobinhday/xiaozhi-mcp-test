@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTabHandler();
   initChatHandler();
   showNoToolsMessage();
+  fetchVoices(); // Load TTS voices from API
   log('info', 'Application initialized');
 });
 

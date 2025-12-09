@@ -69,6 +69,15 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function escapeForJs(text) {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\$/g, '\\$')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
+}
+
 // ============================================
 // Loading State
 // ============================================
