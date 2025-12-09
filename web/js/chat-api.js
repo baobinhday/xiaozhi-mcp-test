@@ -4,6 +4,55 @@
  */
 
 // ============================================
+// Text Cleaning Utilities
+// ============================================
+/**
+ * Clean text for speech synthesis by removing URLs, links, and special symbols
+ * @param {string} text - The text to clean
+ * @returns {string} - Cleaned text suitable for TTS
+ */
+function cleanTextForSpeech(text) {
+  if (!text) return '';
+
+  let cleaned = text;
+
+  // Remove code blocks (```...```)
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, ' code block ');
+
+  // Remove inline code (`...`)
+  cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+
+  // Remove markdown links [text](url) - keep only the text
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+
+  // Remove plain URLs (http://, https://, www.)
+  cleaned = cleaned.replace(/https?:\/\/[^\s]+/g, '');
+  cleaned = cleaned.replace(/www\.[^\s]+/g, '');
+
+  // Remove markdown headers (#, ##, ###, etc.)
+  cleaned = cleaned.replace(/^#+\s+/gm, '');
+
+  // Remove markdown bold/italic (**text**, *text*, __text__, _text_)
+  cleaned = cleaned.replace(/\*\*([^\*]+)\*\*/g, '$1');
+  cleaned = cleaned.replace(/\*([^\*]+)\*/g, '$1');
+  cleaned = cleaned.replace(/__([^_]+)__/g, '$1');
+  cleaned = cleaned.replace(/_([^_]+)_/g, '$1');
+
+  // Remove special symbols that don't contribute to speech
+  cleaned = cleaned.replace(/[•]/g, '');
+  cleaned = cleaned.replace(/[→←↑↓]/g, '');
+  cleaned = cleaned.replace(/[✓✗✕]/g, '');
+
+  // Clean up multiple spaces
+  cleaned = cleaned.replace(/\s+/g, ' ');
+
+  // Trim
+  cleaned = cleaned.trim();
+
+  return cleaned;
+}
+
+// ============================================
 // Chat Handler Initialization
 // ============================================
 function initChatHandler() {
@@ -318,9 +367,22 @@ function updateAssistantMessage(div, content, isError = false) {
       <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed bg-red-500/10 text-red-400 border border-red-500/20 rounded-bl-sm whitespace-pre-wrap">${escapeHtml(content)}</div>
     `;
   } else {
+    // Configure marked for safe markdown rendering
+    marked.setOptions({
+      breaks: true,        // Convert \n to <br>
+      gfm: true,          // GitHub Flavored Markdown
+      headerIds: false,    // Don't add IDs to headers
+      mangle: false,       // Don't mangle email addresses
+    });
+
+    // Parse markdown to HTML
+    const htmlContent = marked.parse(content);
+
     div.className = 'chat-message-wrapper max-w-[80%] self-start';
     div.innerHTML = `
-      <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed bg-[#1c1c26] text-zinc-200 border border-white/10 rounded-bl-sm whitespace-pre-wrap">${escapeHtml(content)}</div>
+      <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed bg-[#1c1c26] text-zinc-200 border border-white/10 rounded-bl-sm">
+        <div class="markdown-content">${htmlContent}</div>
+      </div>
       <div class="speak-controls">
         <select class="tts-voice-select" onchange="setTtsVoice(this.value)" title="Select voice">
           ${getVoiceOptionsHtml()}
@@ -343,7 +405,8 @@ function updateAssistantMessage(div, content, isError = false) {
     if (speakBtn) {
       speakBtn.addEventListener('click', function () {
         const text = this.getAttribute('data-speak-text');
-        speakText(text, this);
+        const cleanedText = cleanTextForSpeech(text);
+        speakText(cleanedText, this);
       });
     }
 

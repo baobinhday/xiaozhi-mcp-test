@@ -222,3 +222,200 @@ body {
     transform: scale(1);
   }
 }
+
+/* ============================================
+   Markdown Content Styling
+   ============================================ */
+.markdown-content {
+  line-height: 1.6;
+}
+
+.markdown-content>*:first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-content>*:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Headers */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  color: #e4e4e7;
+}
+
+.markdown-content h1 {
+  font-size: 1.5em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.3em;
+}
+
+.markdown-content h2 {
+  font-size: 1.3em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 0.3em;
+}
+
+.markdown-content h3 {
+  font-size: 1.15em;
+}
+
+.markdown-content h4 {
+  font-size: 1.05em;
+}
+
+.markdown-content h5,
+.markdown-content h6 {
+  font-size: 1em;
+  color: #a1a1aa;
+}
+
+/* Paragraphs */
+.markdown-content p {
+  margin: 0.8em 0;
+}
+
+/* Links */
+.markdown-content a {
+  color: #818cf8;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(129, 140, 248, 0.3);
+  transition: all 0.2s ease;
+}
+
+.markdown-content a:hover {
+  color: #a5b4fc;
+  border-bottom-color: #a5b4fc;
+}
+
+/* Lists */
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.8em 0;
+  padding-left: 1.5em;
+}
+
+.markdown-content li {
+  margin: 0.3em 0;
+}
+
+.markdown-content ul>li {
+  list-style-type: disc;
+}
+
+.markdown-content ol>li {
+  list-style-type: decimal;
+}
+
+.markdown-content li>ul,
+.markdown-content li>ol {
+  margin: 0.3em 0;
+}
+
+/* Code blocks */
+.markdown-content pre {
+  background: #0f0f14;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 1em 0;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+.markdown-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #e4e4e7;
+  font-size: inherit;
+}
+
+/* Inline code */
+.markdown-content code {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+  color: #a5b4fc;
+}
+
+/* Blockquotes */
+.markdown-content blockquote {
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  border-left: 4px solid #6366f1;
+  background: rgba(99, 102, 241, 0.05);
+  color: #d4d4d8;
+}
+
+.markdown-content blockquote p {
+  margin: 0.5em 0;
+}
+
+/* Horizontal rules */
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 1.5em 0;
+}
+
+/* Tables */
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 0.9em;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.markdown-content th {
+  background: rgba(99, 102, 241, 0.1);
+  font-weight: 600;
+  color: #e4e4e7;
+}
+
+.markdown-content tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Images */
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 1em 0;
+}
+
+/* Strong and emphasis */
+.markdown-content strong {
+  font-weight: 600;
+  color: #e4e4e7;
+}
+
+.markdown-content em {
+  font-style: italic;
+  color: #d4d4d8;
+}
+
+/* Task lists */
+.markdown-content input[type="checkbox"] {
+  margin-right: 0.5em;
+}
