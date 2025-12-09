@@ -1,4 +1,6 @@
 """Search tool functions."""
+
+# from pydantic import BaseModel, Field
 import sys
 from ddgs import DDGS
 from typing import Dict, Any
@@ -10,6 +12,16 @@ if sys.platform == "win32":
 
 # Initialize web search tool
 ddgs = DDGS()
+
+# class TimKiemWebArgs(BaseModel):
+#     truy_van: str = Field(
+#         ...,
+#         description="Câu truy vấn cần tìm kiếm trên web, ví dụ: 'thời tiết Hà Nội hôm nay'."
+#     )
+#     so_ket_qua: int = Field(
+#         5,
+#         description="Số lượng kết quả tối đa muốn lấy, mặc định là 5."
+#     )
 
 
 def tim_kiem_web(truy_van: str, so_ket_qua: int = 5) -> Dict[str, Any]:
