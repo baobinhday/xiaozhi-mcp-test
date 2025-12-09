@@ -67,7 +67,9 @@ async def connect_to_server(uri, target):
     """Connect to WebSocket server and pipe stdio for the given server target."""
     try:
         logger.info(f"[{target}] Connecting to WebSocket server...")
-        async with websockets.connect(uri) as websocket:
+        # Add server name to URI for hub identification
+        ws_uri = f"{uri}?server={target}" if "?" not in uri else f"{uri}&server={target}"
+        async with websockets.connect(ws_uri) as websocket:
             logger.info(f"[{target}] Successfully connected to WebSocket server")
 
             # Start server process (built from CLI arg or config)
@@ -176,7 +178,10 @@ def load_config():
         return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            content = f.read()
+            # Expand environment variables using the ${VAR} or $VAR format
+            expanded_content = os.path.expandvars(content)
+            return json.loads(expanded_content)
     except Exception as e:
         logger.warning(f"Failed to load config {path}: {e}")
         return {}

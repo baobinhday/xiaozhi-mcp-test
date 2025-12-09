@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Environment files
+.env
+
+# Documentation (optional, remove if needed in container)
+*.md
+CLAUDE.md
+help.md
+
+# Test files (optional, uncomment if you don't need tests in production)
+# test/
+
+# Cache and temporary files
+.cache/
+.pytest_cache/
+*.log
