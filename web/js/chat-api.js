@@ -398,6 +398,13 @@ function updateAssistantMessage(div, content, isError = false) {
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
         </button>
+        <button class="regenerate-btn" title="Regenerate response">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
       </div>
 `;
     // Add event listener to the speak button
@@ -440,6 +447,14 @@ function updateAssistantMessage(div, content, isError = false) {
         }
       });
     }
+
+    // Add event listener to the regenerate button
+    const regenerateBtn = div.querySelector('.regenerate-btn');
+    if (regenerateBtn) {
+      regenerateBtn.addEventListener('click', async function () {
+        await regenerateResponse(div);
+      });
+    }
   }
   elements.chatBody.scrollTop = elements.chatBody.scrollHeight;
 }
@@ -461,6 +476,60 @@ function addChatMessage(content, role) {
 
   elements.chatBody.scrollTop = elements.chatBody.scrollHeight;
 }
+
+// ============================================
+// Regenerate Response
+// ============================================
+async function regenerateResponse(currentDiv) {
+  // Prevent multiple simultaneous requests
+  if (state.isGenerating) {
+    log('warning', 'Please wait for the current response to complete');
+    return;
+  }
+
+  // Check if settings are configured
+  if (!state.chatSettings.baseUrl || !state.chatSettings.model) {
+    log('warning', 'Please configure chat settings first (Base URL and Model required)');
+    openSettingsModal();
+    return;
+  }
+
+  // Find the index of the current assistant response in the DOM
+  const chatMessages = Array.from(elements.chatBody.children);
+  const currentIndex = chatMessages.indexOf(currentDiv);
+
+  if (currentIndex === -1) {
+    log('error', 'Could not find message to regenerate');
+    return;
+  }
+
+  // Remove the current assistant message from the DOM
+  currentDiv.remove();
+
+  // Remove the last assistant response from history if it exists
+  // We need to remove all messages after the last user message
+  let lastUserIndex = -1;
+  for (let i = state.chatHistory.length - 1; i >= 0; i--) {
+    if (state.chatHistory[i].role === 'user') {
+      lastUserIndex = i;
+      break;
+    }
+  }
+
+  if (lastUserIndex === -1) {
+    log('error', 'No user message found to regenerate from');
+    return;
+  }
+
+  // Remove all messages after the last user message (assistant and tool responses)
+  state.chatHistory = state.chatHistory.slice(0, lastUserIndex + 1);
+
+  log('info', 'Regenerating response...');
+
+  // Call LLM API to regenerate
+  await callChatAPI();
+}
+
 
 // ============================================
 // Chat History

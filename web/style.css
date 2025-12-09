@@ -223,6 +223,32 @@ body {
   }
 }
 
+/* Regenerate button */
+.regenerate-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.regenerate-btn:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #8b5cf6;
+  transform: scale(1.1) rotate(180deg);
+}
+
+.regenerate-btn:active {
+  transform: scale(0.95) rotate(180deg);
+}
+
 /* ============================================
    Markdown Content Styling
    ============================================ */
