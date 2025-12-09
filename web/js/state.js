@@ -25,6 +25,8 @@ const state = {
     model: '',
     systemPrompt: '',
     maxHistory: 20,
+    toolMode: 'selected', // 'selected' or 'custom'
+    customTools: [], // array of tool names when toolMode is 'custom'
     availableModels: []
   }
 };

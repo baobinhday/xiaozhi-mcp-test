@@ -281,22 +281,40 @@ async function executeToolForChat(toolName, args) {
 }
 
 function buildToolsForAPI() {
+  const { toolMode, customTools } = state.chatSettings;
+
+  if (toolMode === 'custom' && customTools && customTools.length > 0) {
+    // Use custom selected tools
+    return customTools
+      .map(toolName => {
+        const tool = state.tools.find(t => t.name === toolName);
+        if (!tool) return null;
+        return {
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description || `Execute the ${tool.name} tool`,
+            parameters: tool.inputSchema || { type: 'object', properties: {} }
+          }
+        };
+      })
+      .filter(t => t !== null);
+  }
+
+  // Default: use selected tool from sidebar
   const selectedTool = state.tools[state.selectedToolIndex];
   if (!selectedTool) {
     return [];
   }
 
-  // Convert MCP tool schema to OpenAI function format
-  const tool = {
+  return [{
     type: 'function',
     function: {
       name: selectedTool.name,
       description: selectedTool.description || `Execute the ${selectedTool.name} tool`,
       parameters: selectedTool.inputSchema || { type: 'object', properties: {} }
     }
-  };
-
-  return [tool];
+  }];
 }
 
 function createAssistantMessageDiv() {
@@ -400,6 +418,15 @@ function openSettingsModal() {
     populateModelSelect(state.chatSettings.availableModels, state.chatSettings.model);
   }
 
+  // Set tool mode radio
+  const toolMode = state.chatSettings.toolMode || 'selected';
+  document.getElementById('tool-mode-selected').checked = toolMode === 'selected';
+  document.getElementById('tool-mode-custom').checked = toolMode === 'custom';
+
+  // Populate and show/hide custom tools panel
+  populateCustomToolsList();
+  toggleCustomToolsPanel();
+
   elements.settingsModal.classList.remove('hidden');
   elements.settingsModal.classList.add('flex');
 
@@ -426,10 +453,54 @@ function saveSettings() {
   state.chatSettings.systemPrompt = systemPromptInput?.value || '';
   state.chatSettings.maxHistory = parseInt(maxHistoryInput?.value) || 20;
 
+  // Save tool mode and custom tools
+  state.chatSettings.toolMode = document.getElementById('tool-mode-custom').checked ? 'custom' : 'selected';
+  state.chatSettings.customTools = getSelectedCustomTools();
+
   saveChatSettings();
   closeSettingsModal();
 
   log('success', 'Settings saved');
+}
+
+function toggleCustomToolsPanel() {
+  const panel = document.getElementById('custom-tools-panel');
+  const isCustomMode = document.getElementById('tool-mode-custom').checked;
+
+  if (panel) {
+    if (isCustomMode) {
+      panel.classList.remove('hidden');
+    } else {
+      panel.classList.add('hidden');
+    }
+  }
+}
+
+function populateCustomToolsList() {
+  const listEl = document.getElementById('custom-tools-list');
+  if (!listEl) return;
+
+  if (state.tools.length === 0) {
+    listEl.innerHTML = '<p class="text-xs text-zinc-500 italic">Connect to MCP to see available tools</p>';
+    return;
+  }
+
+  const savedCustomTools = state.chatSettings.customTools || [];
+
+  listEl.innerHTML = state.tools.map(tool => `
+    <label class="flex items-center gap-2 p-1 rounded hover:bg-white/5 cursor-pointer">
+      <input type="checkbox" value="${tool.name}" 
+        ${savedCustomTools.includes(tool.name) ? 'checked' : ''}
+        class="custom-tool-checkbox w-4 h-4 accent-indigo-500">
+      <span class="text-sm text-zinc-300">${formatToolName(tool.name)}</span>
+      <span class="text-xs text-zinc-500">(${tool.name})</span>
+    </label>
+  `).join('');
+}
+
+function getSelectedCustomTools() {
+  const checkboxes = document.querySelectorAll('.custom-tool-checkbox:checked');
+  return Array.from(checkboxes).map(cb => cb.value);
 }
 
 async function fetchModels() {

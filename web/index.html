@@ -232,6 +232,34 @@
                     <p class="text-xs text-zinc-500">Maximum number of messages to keep in context</p>
                 </div>
 
+                <!-- Tool Selection -->
+                <div class="space-y-3">
+                    <label class="block text-sm font-medium text-zinc-400">Tool Selection</label>
+
+                    <!-- Radio Options -->
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="tool-mode" value="selected" id="tool-mode-selected" checked
+                                class="w-4 h-4 accent-indigo-500" onchange="toggleCustomToolsPanel()">
+                            <span class="text-sm text-zinc-300">Use selected tool</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="tool-mode" value="custom" id="tool-mode-custom"
+                                class="w-4 h-4 accent-indigo-500" onchange="toggleCustomToolsPanel()">
+                            <span class="text-sm text-zinc-300">Custom tools</span>
+                        </label>
+                    </div>
+
+                    <!-- Custom Tools Panel (hidden by default) -->
+                    <div id="custom-tools-panel" class="hidden space-y-2">
+                        <p class="text-xs text-zinc-500">Select tools to use in chat:</p>
+                        <div id="custom-tools-list"
+                            class="max-h-[150px] overflow-y-auto bg-[#1c1c26] border border-white/10 rounded-lg p-2 space-y-1">
+                            <p class="text-xs text-zinc-500 italic">Connect to MCP to see available tools</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- System Prompt -->
                 <div class="space-y-2">
                     <label for="settings-system-prompt" class="block text-sm font-medium text-zinc-400">System
