@@ -1,0 +1,21 @@
+"""MCP Server for Search and News tools."""
+import sys
+import os
+
+# Add project root to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from mcp.server.fastmcp import FastMCP
+from tools.search_tools import tim_kiem_web, doc_tin_tuc_moi_nhat
+
+# Create MCP server
+mcp = FastMCP("SearchAndNews")
+
+# Register tools
+mcp.tool()(tim_kiem_web)
+mcp.tool()(doc_tin_tuc_moi_nhat)
+
+# Start the server
+if __name__ == "__main__":
+    print("[MCP Server] Starting SearchAndNews server...")
+    mcp.run(transport="stdio")

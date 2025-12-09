@@ -10,9 +10,11 @@ const state = {
     websocket: null,
     isConnected: false,
     mcpConnected: false,
-    mcpToolName: null,
+    mcpServers: [],  // List of connected server names
     requestId: 1,
-    pendingRequests: new Map()
+    pendingRequests: new Map(),
+    tools: [], // Store available tools
+    selectedToolIndex: 0
 };
 
 // ============================================
@@ -22,44 +24,35 @@ const elements = {
     wsEndpoint: document.getElementById('ws-endpoint'),
     connectBtn: document.getElementById('connect-btn'),
     connectionStatus: document.getElementById('connection-status'),
+    responsePanel: document.querySelector('.response-panel'),
     responseContent: document.getElementById('response-content'),
     logContent: document.getElementById('log-content'),
-    toolBtns: document.querySelectorAll('.tool-btn'),
-    toolForms: document.querySelectorAll('.tool-form')
+    toolNav: document.querySelector('.tool-nav'),
+    toolPanel: document.querySelector('.tool-panel')
 };
 
 // ============================================
 // Initialize
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
-    initToolNavigation();
     initConnectionHandler();
+    showNoToolsMessage();
     log('info', 'Application initialized');
 });
 
-// ============================================
-// Tool Navigation
-// ============================================
-function initToolNavigation() {
-    elements.toolBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const toolId = btn.dataset.tool;
-
-            // Update active button
-            elements.toolBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            // Update active form
-            elements.toolForms.forEach(form => {
-                form.classList.remove('active');
-                if (form.id === `${toolId}-form`) {
-                    form.classList.add('active');
-                }
-            });
-
-            log('info', `Switched to tool: ${toolId}`);
-        });
-    });
+function showNoToolsMessage() {
+    elements.toolNav.innerHTML = `
+        <div class="no-tools-message">
+            <span class="no-tools-icon">🔌</span>
+            <p>Connect to MCP server to see available tools</p>
+        </div>
+    `;
+    elements.toolPanel.innerHTML = `
+        <div class="empty-state">
+            <span class="empty-icon">🔧</span>
+            <p>No tools available. Connect to an MCP server first.</p>
+        </div>
+    `;
 }
 
 // ============================================
@@ -97,6 +90,9 @@ function connect() {
             state.isConnected = false;
             updateConnectionUI(false);
             log('warning', `Connection closed: ${event.code} ${event.reason || ''}`);
+            // Clear tools on disconnect
+            state.tools = [];
+            showNoToolsMessage();
         };
 
         state.websocket.onerror = (error) => {
@@ -118,7 +114,9 @@ function disconnect() {
         state.websocket = null;
     }
     state.isConnected = false;
+    state.tools = [];
     updateConnectionUI(false);
+    showNoToolsMessage();
     log('info', 'Disconnected');
 }
 
@@ -131,17 +129,19 @@ function updateConnectionUI(status) {
 
     if (status === 'connected') {
         statusEl.classList.add('connected');
-        textEl.textContent = 'Connected';
+        const serverCount = state.mcpServers.length;
+        const serverText = serverCount === 1 ? '1 server' : `${serverCount} servers`;
+        textEl.textContent = `Connected (${serverText})`;
         elements.connectBtn.innerHTML = '<span class="btn-icon">⚡</span> Disconnect';
     } else if (status === 'waiting') {
         statusEl.classList.add('waiting');
-        textEl.textContent = 'Waiting for MCP tool...';
+        textEl.textContent = 'Waiting for MCP servers...';
         elements.connectBtn.innerHTML = '<span class="btn-icon">⚡</span> Disconnect';
     } else {
         textEl.textContent = 'Disconnected';
         elements.connectBtn.innerHTML = '<span class="btn-icon">⚡</span> Connect';
         state.mcpConnected = false;
-        state.mcpToolName = null;
+        state.mcpServers = [];
     }
 }
 
@@ -184,45 +184,51 @@ function sendRequest(method, params = {}) {
 }
 
 function handleMessage(data) {
+    let message;
     try {
-        const message = JSON.parse(data);
-
-        // Handle status messages from hub
-        if (message.type === 'status') {
-            state.mcpConnected = message.mcp_connected;
-            state.mcpToolName = message.mcp_tool_name;
-
-            if (message.mcp_connected) {
-                updateConnectionUI('connected');
-                log('success', `MCP tool connected: ${message.mcp_tool_name}`);
-                // Initialize MCP session
-                sendInitialize();
-            } else {
-                updateConnectionUI('waiting');
-                log('warning', 'MCP tool disconnected');
-            }
-            return;
-        }
-
-        log('received', `← Response received`);
-
-        if (message.id && state.pendingRequests.has(message.id)) {
-            const { resolve, reject } = state.pendingRequests.get(message.id);
-            state.pendingRequests.delete(message.id);
-
-            if (message.error) {
-                reject(new Error(message.error.message || 'Unknown error'));
-                displayResponse({ error: message.error });
-            } else {
-                resolve(message.result);
-                displayResponse(message.result);
-            }
-        } else {
-            // Notification or other message
-            displayResponse(message);
-        }
+        message = JSON.parse(data);
     } catch (error) {
-        log('error', `Failed to parse message: ${error.message}`);
+        // Silently ignore non-JSON messages (debug output from MCP servers)
+        return;
+    }
+
+    // Handle status messages from hub
+    if (message.type === 'status') {
+        state.mcpConnected = message.mcp_connected;
+        state.mcpServers = message.mcp_servers || [];
+
+        if (message.mcp_connected && state.mcpServers.length > 0) {
+            updateConnectionUI('connected');
+            const serverList = state.mcpServers.join(', ');
+            log('success', `MCP servers connected: ${serverList}`);
+            // Initialize MCP session
+            sendInitialize();
+        } else {
+            updateConnectionUI('waiting');
+            log('warning', 'MCP servers disconnected');
+            // Clear tools when MCP disconnects
+            state.tools = [];
+            showNoToolsMessage();
+        }
+        return;
+    }
+
+    log('received', `← Response received`);
+
+    if (message.id && state.pendingRequests.has(message.id)) {
+        const { resolve, reject } = state.pendingRequests.get(message.id);
+        state.pendingRequests.delete(message.id);
+
+        if (message.error) {
+            reject(new Error(message.error.message || 'Unknown error'));
+            displayResponse({ error: message.error });
+        } else {
+            resolve(message.result);
+            displayResponse(message.result);
+        }
+    } else {
+        // Notification or other message
+        displayResponse(message);
     }
 }
 
@@ -238,6 +244,10 @@ function sendInitialize() {
         log('success', 'MCP session initialized');
         // Send initialized notification
         sendNotification('notifications/initialized', {});
+        // Wait a bit before fetching tools to allow servers to finish initialization
+        setTimeout(() => {
+            fetchTools();
+        }, 500);
     }).catch(error => {
         log('warning', `Initialize failed: ${error.message}`);
     });
@@ -257,74 +267,323 @@ function sendNotification(method, params = {}) {
 }
 
 // ============================================
-// Tool Execution Functions
+// Dynamic Tool Loading
 // ============================================
-function executeWebSearch() {
-    const query = document.getElementById('search-query').value.trim();
-    const maxResults = parseInt(document.getElementById('search-results').value) || 5;
+function fetchTools() {
+    log('info', 'Fetching available tools...');
+    sendRequest('tools/list', {}).then(result => {
+        const tools = result.tools || [];
+        state.tools = tools;
+        log('success', `Found ${tools.length} tool(s)`);
 
-    if (!query) {
-        log('error', 'Please enter a search query');
-        return;
-    }
-
-    log('info', `Executing web search: "${query}"`);
-
-    sendRequest('tools/call', {
-        name: 'tim_kiem_web',
-        arguments: {
-            truy_van: query,
-            so_ket_qua: maxResults
+        if (tools.length > 0) {
+            renderToolsList(tools);
+            selectTool(0);
+        } else {
+            showNoToolsMessage();
         }
-    }).then(result => {
-        log('success', 'Web search completed');
     }).catch(error => {
-        log('error', `Web search failed: ${error.message}`);
+        log('error', `Failed to fetch tools: ${error.message}`);
+        showNoToolsMessage();
     });
 }
 
-function executeNewsReader() {
-    const maxArticles = parseInt(document.getElementById('news-count').value) || 3;
+function renderToolsList(tools) {
+    elements.toolNav.innerHTML = tools.map((tool, index) => `
+        <button class="tool-btn ${index === 0 ? 'active' : ''}" data-tool-index="${index}">
+            <span class="tool-icon">${getToolIcon(tool.name)}</span>
+            <span class="tool-name">${formatToolName(tool.name)}</span>
+            <span class="tool-desc">${tool.name}</span>
+        </button>
+    `).join('');
 
-    log('info', `Fetching news (max ${maxArticles} per source)...`);
-
-    sendRequest('tools/call', {
-        name: 'doc_tin_tuc_moi_nhat',
-        arguments: {
-            so_bai_bao_toi_da: maxArticles
-        }
-    }).then(result => {
-        log('success', 'News fetched successfully');
-    }).catch(error => {
-        log('error', `News fetch failed: ${error.message}`);
+    // Add click handlers
+    elements.toolNav.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const index = parseInt(btn.dataset.toolIndex);
+            selectTool(index);
+        });
     });
 }
 
-function executeCalculator() {
-    const expression = document.getElementById('calc-expression').value.trim();
+function selectTool(index) {
+    state.selectedToolIndex = index;
 
-    if (!expression) {
-        log('error', 'Please enter a Python expression');
+    // Update button states
+    elements.toolNav.querySelectorAll('.tool-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === index);
+    });
+
+    // Render the form for selected tool
+    const tool = state.tools[index];
+    if (tool) {
+        renderToolForm(tool);
+        log('info', `Selected tool: ${tool.name}`);
+    }
+}
+
+function renderToolForm(tool) {
+    const inputSchema = tool.inputSchema || {};
+    const properties = inputSchema.properties || {};
+    const required = inputSchema.required || [];
+
+    let formHtml = `
+        <div class="tool-form active" id="tool-form-${tool.name}">
+            <div class="tool-header">
+                <h2>${getToolIcon(tool.name)} ${formatToolName(tool.name)}</h2>
+                <p>${tool.description || 'No description available'}</p>
+            </div>
+    `;
+
+    // Generate form fields from schema
+    for (const [propName, propSchema] of Object.entries(properties)) {
+        const isRequired = required.includes(propName);
+        const fieldId = `field-${tool.name}-${propName}`;
+
+        formHtml += `
+            <div class="form-group">
+                <label for="${fieldId}">
+                    ${formatFieldName(propName)}
+                    ${isRequired ? '<span class="required">*</span>' : ''}
+                </label>
+                ${renderFormField(fieldId, propName, propSchema)}
+                ${propSchema.description ? `<small class="field-hint">${propSchema.description}</small>` : ''}
+            </div>
+        `;
+    }
+
+    formHtml += `
+            <button class="btn btn-execute" onclick="executeSelectedTool()">
+                <span class="btn-icon">▶</span>
+                Execute ${formatToolName(tool.name)}
+            </button>
+        </div>
+    `;
+
+    elements.toolPanel.innerHTML = formHtml;
+}
+
+function renderFormField(id, name, schema) {
+    const type = schema.type || 'string';
+    const defaultValue = schema.default !== undefined ? schema.default : '';
+
+    switch (type) {
+        case 'integer':
+        case 'number':
+            return `<input type="number" id="${id}" data-param="${name}" 
+                    value="${defaultValue}" 
+                    ${schema.minimum !== undefined ? `min="${schema.minimum}"` : ''} 
+                    ${schema.maximum !== undefined ? `max="${schema.maximum}"` : ''} 
+                    class="input input-small">`;
+
+        case 'boolean':
+            return `<select id="${id}" data-param="${name}" class="input input-small">
+                <option value="true" ${defaultValue === true ? 'selected' : ''}>True</option>
+                <option value="false" ${defaultValue === false ? 'selected' : ''}>False</option>
+            </select>`;
+
+        case 'array':
+            return `<textarea id="${id}" data-param="${name}" 
+                    placeholder="Enter values separated by newlines or as JSON array" 
+                    class="input input-textarea">${defaultValue}</textarea>`;
+
+        case 'object':
+            return `<textarea id="${id}" data-param="${name}" 
+                    placeholder="Enter JSON object" 
+                    class="input input-textarea">${JSON.stringify(defaultValue || {}, null, 2)}</textarea>`;
+
+        default: // string
+            if (schema.enum) {
+                return `<select id="${id}" data-param="${name}" class="input">
+                    ${schema.enum.map(opt => `<option value="${opt}" ${opt === defaultValue ? 'selected' : ''}>${opt}</option>`).join('')}
+                </select>`;
+            }
+            return `<input type="text" id="${id}" data-param="${name}" 
+                    value="${defaultValue}" 
+                    placeholder="${schema.description || `Enter ${formatFieldName(name)}...`}" 
+                    class="input">`;
+    }
+}
+
+// ============================================
+// Tool Execution
+// ============================================
+function executeSelectedTool() {
+    const tool = state.tools[state.selectedToolIndex];
+    if (!tool) {
+        log('error', 'No tool selected');
         return;
     }
 
-    log('info', `Calculating: ${expression}`);
+    const args = collectFormArguments(tool);
+    if (args === null) return; // Validation failed
+
+    log('info', `Executing: ${tool.name}`);
+    showLoading(`Running ${tool.name}...`);
 
     sendRequest('tools/call', {
-        name: 'calculator',
-        arguments: {
-            python_expression: expression
-        }
+        name: tool.name,
+        arguments: args
     }).then(result => {
-        log('success', 'Calculation completed');
+        hideLoading();
+        log('success', `${tool.name} completed`);
     }).catch(error => {
-        log('error', `Calculation failed: ${error.message}`);
+        hideLoading();
+        log('error', `${tool.name} failed: ${error.message}`);
     });
+}
+
+function collectFormArguments(tool) {
+    const inputSchema = tool.inputSchema || {};
+    const properties = inputSchema.properties || {};
+    const required = inputSchema.required || [];
+    const args = {};
+
+    for (const [propName, propSchema] of Object.entries(properties)) {
+        const fieldId = `field-${tool.name}-${propName}`;
+        const element = document.getElementById(fieldId);
+
+        if (!element) continue;
+
+        let value = element.value.trim();
+        const type = propSchema.type || 'string';
+
+        // Handle empty values
+        if (value === '' && required.includes(propName)) {
+            log('error', `${formatFieldName(propName)} is required`);
+            element.focus();
+            return null;
+        }
+
+        if (value === '') continue; // Skip optional empty fields
+
+        // Type conversion
+        switch (type) {
+            case 'integer':
+                value = parseInt(value);
+                if (isNaN(value)) {
+                    log('error', `${formatFieldName(propName)} must be a valid integer`);
+                    return null;
+                }
+                break;
+            case 'number':
+                value = parseFloat(value);
+                if (isNaN(value)) {
+                    log('error', `${formatFieldName(propName)} must be a valid number`);
+                    return null;
+                }
+                break;
+            case 'boolean':
+                value = value === 'true';
+                break;
+            case 'array':
+                try {
+                    if (value.startsWith('[')) {
+                        value = JSON.parse(value);
+                    } else {
+                        value = value.split('\n').map(v => v.trim()).filter(v => v);
+                    }
+                } catch (e) {
+                    log('error', `${formatFieldName(propName)} must be a valid array`);
+                    return null;
+                }
+                break;
+            case 'object':
+                try {
+                    value = JSON.parse(value);
+                } catch (e) {
+                    log('error', `${formatFieldName(propName)} must be valid JSON`);
+                    return null;
+                }
+                break;
+        }
+
+        args[propName] = value;
+    }
+
+    return args;
+}
+
+// ============================================
+// Utility Functions
+// ============================================
+function getToolIcon(toolName) {
+    const iconMap = {
+        'search': '🔍',
+        'web': '🌐',
+        'news': '📰',
+        'calculator': '🧮',
+        'calc': '🧮',
+        'file': '📁',
+        'read': '📖',
+        'write': '✍️',
+        'email': '📧',
+        'weather': '🌤️',
+        'time': '⏰',
+        'translate': '🌍',
+        'image': '🖼️',
+        'audio': '🎵',
+        'video': '🎬',
+        'database': '🗄️',
+        'api': '🔗',
+        'code': '💻',
+        'git': '📦',
+        'shell': '💻',
+        'python': '🐍',
+        'random': '🎲'
+    };
+
+    const lowerName = toolName.toLowerCase();
+    for (const [key, icon] of Object.entries(iconMap)) {
+        if (lowerName.includes(key)) return icon;
+    }
+    return '🔧';
+}
+
+function formatToolName(name) {
+    return name
+        .replace(/_/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+}
+
+function formatFieldName(name) {
+    return name
+        .replace(/_/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
 }
 
 // ============================================
 // Response Display
 // ============================================
+function showLoading(message = 'Executing tool...') {
+    // Check if loading overlay already exists
+    let overlay = elements.responsePanel.querySelector('.loading-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'loading-overlay';
+        overlay.innerHTML = `
+            <div class="loading-spinner"></div>
+            <div class="loading-text">${message}</div>
+        `;
+        elements.responsePanel.appendChild(overlay);
+    } else {
+        overlay.querySelector('.loading-text').textContent = message;
+    }
+}
+
+function hideLoading() {
+    const overlay = elements.responsePanel.querySelector('.loading-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+}
+
 function displayResponse(data) {
     const html = syntaxHighlightJSON(data);
     elements.responseContent.innerHTML = `<div class="json-viewer">${html}</div>`;
@@ -396,7 +655,7 @@ function clearLogs() {
 // ============================================
 document.addEventListener('keydown', (e) => {
     // Enter to submit in input fields
-    if (e.key === 'Enter' && e.target.classList.contains('input')) {
+    if (e.key === 'Enter' && e.target.classList.contains('input') && !e.target.classList.contains('input-textarea')) {
         const form = e.target.closest('.tool-form');
         if (form) {
             const btn = form.querySelector('.btn-execute');
@@ -404,3 +663,4 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+

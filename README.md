@@ -56,10 +56,10 @@ This connects your Python MCP tool to the Web Server's hub using `mcp_pipe.py`.
 ```bash
 # From the project root
 export MCP_ENDPOINT=ws://localhost:8889/mcp
-python3 mcp_pipe.py agent_tools.py
+python3 mcp_pipe.py tools/agent_tools.py
 ```
 
-*Note: You can replace `agent_tools.py` with any text-based MCP tool script (e.g., `test/calculator.py`).*
+*Note: You can replace `tools/agent_tools.py` with any text-based MCP tool script (e.g., `tools/calculator.py`).*
 
 ## Usage
 

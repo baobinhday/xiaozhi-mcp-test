@@ -56,78 +56,13 @@
             <aside class="sidebar">
                 <h2 class="sidebar-title">Available Tools</h2>
                 <nav class="tool-nav">
-                    <button class="tool-btn active" data-tool="web-search">
-                        <span class="tool-icon">🔍</span>
-                        <span class="tool-name">Web Search</span>
-                        <span class="tool-desc">tim_kiem_web</span>
-                    </button>
-                    <button class="tool-btn" data-tool="news">
-                        <span class="tool-icon">📰</span>
-                        <span class="tool-name">News Reader</span>
-                        <span class="tool-desc">doc_tin_tuc_moi_nhat</span>
-                    </button>
-                    <button class="tool-btn" data-tool="calculator">
-                        <span class="tool-icon">🧮</span>
-                        <span class="tool-name">Calculator</span>
-                        <span class="tool-desc">calculator</span>
-                    </button>
+                    <!-- Tools will be dynamically loaded here -->
                 </nav>
             </aside>
 
             <!-- Tool Forms -->
             <section class="tool-panel">
-                <!-- Web Search Tool -->
-                <div class="tool-form active" id="web-search-form">
-                    <div class="tool-header">
-                        <h2>🔍 Web Search</h2>
-                        <p>Search the web using DuckDuckGo</p>
-                    </div>
-                    <div class="form-group">
-                        <label for="search-query">Search Query</label>
-                        <input type="text" id="search-query" placeholder="Enter your search query..." class="input">
-                    </div>
-                    <div class="form-group">
-                        <label for="search-results">Max Results</label>
-                        <input type="number" id="search-results" value="5" min="1" max="20" class="input input-small">
-                    </div>
-                    <button class="btn btn-execute" onclick="executeWebSearch()">
-                        <span class="btn-icon">▶</span>
-                        Execute Search
-                    </button>
-                </div>
-
-                <!-- News Tool -->
-                <div class="tool-form" id="news-form">
-                    <div class="tool-header">
-                        <h2>📰 News Reader</h2>
-                        <p>Fetch latest news from Vietnamese sources (VnExpress, Tuoi Tre, Thanh Nien)</p>
-                    </div>
-                    <div class="form-group">
-                        <label for="news-count">Max Articles per Source</label>
-                        <input type="number" id="news-count" value="3" min="1" max="10" class="input input-small">
-                    </div>
-                    <button class="btn btn-execute" onclick="executeNewsReader()">
-                        <span class="btn-icon">▶</span>
-                        Fetch News
-                    </button>
-                </div>
-
-                <!-- Calculator Tool -->
-                <div class="tool-form" id="calculator-form">
-                    <div class="tool-header">
-                        <h2>🧮 Calculator</h2>
-                        <p>Evaluate Python mathematical expressions (math and random modules available)</p>
-                    </div>
-                    <div class="form-group">
-                        <label for="calc-expression">Python Expression</label>
-                        <input type="text" id="calc-expression"
-                            placeholder="e.g., 2 + 2 * 3, math.sqrt(16), random.randint(1, 100)" class="input">
-                    </div>
-                    <button class="btn btn-execute" onclick="executeCalculator()">
-                        <span class="btn-icon">▶</span>
-                        Calculate
-                    </button>
-                </div>
+                <!-- Tool form will be dynamically rendered here -->
             </section>
 
             <!-- Response Panel -->

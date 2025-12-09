@@ -1,27 +1,19 @@
+"""Search and news tool functions."""
 import sys
 import io
-import os
 import feedparser
 from ddgs import DDGS
-from mcp.server.fastmcp import FastMCP
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 
-# --- SỬA LỖI MÃ HÓA UTF-8 CHO WINDOWS (Giữ lại) ---
+# --- UTF-8 ENCODING FIX FOR WINDOWS ---
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# --- 1. KHỞI TẠO DỊCH VỤ ---
-
-# Khởi tạo máy chủ MCP
-mcp = FastMCP("CongCuTimKiemVaTinTuc")
-
-# Khởi tạo công cụ tìm kiếm web
+# Initialize web search tool
 ddgs = DDGS()
 
-# --- 2. ĐỊNH NGHĨA CÁC CÔNG CỤ ---
 
-@mcp.tool()
 def tim_kiem_web(truy_van: str, so_ket_qua: int = 5) -> Dict[str, Any]:
     """
     Tìm kiếm thông tin trên web bằng DuckDuckGo.
@@ -54,7 +46,7 @@ def tim_kiem_web(truy_van: str, so_ket_qua: int = 5) -> Dict[str, Any]:
         print(f"[Tool Error] Lỗi khi tìm kiếm: {e}")
         return {"success": False, "error": str(e)}
 
-@mcp.tool()
+
 def doc_tin_tuc_moi_nhat(so_bai_bao_toi_da: int = 3) -> Dict[str, Any]:
     """
     Lấy các tin tức mới nhất từ các trang báo hàng đầu Việt Nam qua RSS.
@@ -84,9 +76,3 @@ def doc_tin_tuc_moi_nhat(so_bai_bao_toi_da: int = 3) -> Dict[str, Any]:
     except Exception as e:
         print(f"[Tool Error] Lỗi khi đọc RSS: {e}")
         return {"success": False, "error": str(e)}
-
-# --- 3. CHẠY MÁY CHỦ ---
-if __name__ == "__main__":
-    print("[MCP Tools] Khởi chạy máy chủ công cụ (Tìm kiếm, Tin tức)...")
-    mcp.run(transport="stdio")
-   
