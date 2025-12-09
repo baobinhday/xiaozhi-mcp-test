@@ -43,3 +43,37 @@ def tim_kiem_web(truy_van: str, so_ket_qua: int = 5) -> Dict[str, Any]:
     except Exception as e:
         print(f"[Tool Error] Lỗi khi tìm kiếm: {e}")
         return {"success": False, "error": str(e)}
+<<<<<<< HEAD
+=======
+
+
+def doc_tin_tuc_moi_nhat(so_bai_bao_toi_da: int = 3) -> Dict[str, Any]:
+    """
+    Lấy các tin tức mới nhất từ các trang báo hàng đầu Việt Nam qua RSS.
+    
+    Args:
+        so_bai_bao_toi_da (int): Số lượng bài báo tối đa lấy từ mỗi nguồn.
+    """
+    print(f"[Tool] Đang thực thi 'doc_tin_tuc_moi_nhat'")
+    RSS_FEEDS = {
+        "VnExpress": "https://vnexpress.net/rss/tin-moi-nhat.rss",
+        "Tuoi Tre": "https://tuoitre.vn/rss/tin-moi-nhat.rss",
+        "Thanh Nien": "https://thanhnien.vn/rss/home.rss"
+    }
+    all_news = {}
+    try:
+        for source_name, url in RSS_FEEDS.items():
+            feed = feedparser.parse(url)
+            articles_list = []
+            for entry in feed.entries[:so_bai_bao_toi_da]:
+                articles_list.append({
+                    "title": entry.title,
+                    "link": entry.link,
+                    "summary": entry.get("summary", "N/A"),
+                })
+            all_news[source_name] = articles_list
+        return {"success": True, "news": all_news}
+    except Exception as e:
+        print(f"[Tool Error] Lỗi khi đọc RSS: {e}")
+        return {"success": False, "error": str(e)}
+>>>>>>> main
