@@ -37,7 +37,7 @@ def tim_kiem_web(truy_van: str, so_ket_qua: int = 5) -> Dict[str, Any]:
         results = ddgs.text(
             truy_van,
             region="vi-vn",
-            safesearch="off",
+            safesearch="on",
             max_results=so_ket_qua
         )
         

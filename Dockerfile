@@ -7,6 +7,12 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set working directory
 WORKDIR /app
 
@@ -39,25 +45,25 @@ ENV MCP_ENDPOINT=ws://localhost:8889/mcp
 
 # Create a startup script to run both services
 RUN echo '#!/bin/bash\n\
-set -e\n\
-\n\
-# Start the web server in the background\n\
-echo "Starting Web Server..."\n\
-cd /app/web && python3 server.py &\n\
-WEB_PID=$!\n\
-\n\
-# Wait a bit for the web server to start\n\
-sleep 2\n\
-\n\
-# Start the MCP pipe (default to agent_tools.py)\n\
-MCP_SCRIPT=${MCP_SCRIPT:-agent_tools.py}\n\
-echo "Starting MCP Pipe with $MCP_SCRIPT..."\n\
-cd /app && python3 mcp_pipe.py "$MCP_SCRIPT" &\n\
-MCP_PID=$!\n\
-\n\
-# Wait for both processes\n\
-wait $WEB_PID $MCP_PID\n\
-' > /app/start.sh && chmod +x /app/start.sh
+    set -e\n\
+    \n\
+    # Start the web server in the background\n\
+    echo "Starting Web Server..."\n\
+    cd /app/web && python3 server.py &\n\
+    WEB_PID=$!\n\
+    \n\
+    # Wait a bit for the web server to start\n\
+    sleep 2\n\
+    \n\
+    # Start the MCP pipe (default to agent_tools.py)\n\
+    MCP_SCRIPT=${MCP_SCRIPT:-agent_tools.py}\n\
+    echo "Starting MCP Pipe with $MCP_SCRIPT..."\n\
+    cd /app && python3 mcp_pipe.py "$MCP_SCRIPT" &\n\
+    MCP_PID=$!\n\
+    \n\
+    # Wait for both processes\n\
+    wait $WEB_PID $MCP_PID\n\
+    ' > /app/start.sh && chmod +x /app/start.sh
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
