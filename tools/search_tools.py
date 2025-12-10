@@ -1,57 +1,64 @@
 """Search tool functions."""
 
-# from pydantic import BaseModel, Field
-import sys
+import logging
+from typing import Any, Dict, List, Optional
+
 from ddgs import DDGS
-from typing import Dict, Any
 
-# --- UTF-8 ENCODING FIX FOR WINDOWS ---
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+logger = logging.getLogger("search_tools")
 
-# Initialize web search tool
-ddgs = DDGS()
-
-# class TimKiemWebArgs(BaseModel):
-#     truy_van: str = Field(
-#         ...,
-#         description="Câu truy vấn cần tìm kiếm trên web, ví dụ: 'thời tiết Hà Nội hôm nay'."
-#     )
-#     so_ket_qua: int = Field(
-#         5,
-#         description="Số lượng kết quả tối đa muốn lấy, mặc định là 5."
-#     )
+# Initialize web search client
+_ddgs = DDGS()
 
 
-def tim_kiem_web(truy_van: str, so_ket_qua: int = 5) -> Dict[str, Any]:
-    """
-    Tìm kiếm thông tin trên web bằng DuckDuckGo.
-    
+def web_search(
+    query: str,
+    max_results: int = 5,
+    region: str = "vi-vn",
+) -> Dict[str, Any]:
+    """Search the web using DuckDuckGo.
+
     Args:
-        truy_van (str): Nội dung cần tìm kiếm.
-        so_ket_qua (int): Số lượng kết quả tối đa muốn trả về (mặc định là 5).
+        query: Search query string.
+        max_results: Maximum number of results to return (default: 5).
+        region: Region code for search results (default: "vi-vn" for Vietnam).
+
+    Returns:
+        Dict with 'success' status and 'results' list or 'error' message.
+        Each result contains 'title', 'url', and 'snippet'.
+
+    Examples:
+        >>> web_search("Python best practices")
+        {'success': True, 'results': [...]}
     """
-    print(f"[Tool] Đang thực thi 'tim_kiem_web' với truy vấn: {truy_van}")
+    logger.info(f"Executing web search with query: {query}")
+
     try:
-        results = ddgs.text(
-            truy_van,
-            region="vi-vn",
+        results = _ddgs.text(
+            query,
+            region=region,
             safesearch="on",
-            max_results=so_ket_qua
+            max_results=max_results,
         )
-        
+
         if not results:
-            return {"success": True, "results": "Không tìm thấy kết quả nào."}
-        
-        formatted_results = [
+            return {"success": True, "results": "No results found."}
+
+        formatted_results: List[Dict[str, Optional[str]]] = [
             {
                 "title": r.get("title"),
                 "url": r.get("href"),
-                "snippet": r.get("body")
-            } for r in results
+                "snippet": r.get("body"),
+            }
+            for r in results
         ]
+
         return {"success": True, "results": formatted_results}
+
     except Exception as e:
-        print(f"[Tool Error] Lỗi khi tìm kiếm: {e}")
+        logger.error(f"Search error: {e}")
         return {"success": False, "error": str(e)}
+
+
+# Alias for backward compatibility
+tim_kiem_web = web_search

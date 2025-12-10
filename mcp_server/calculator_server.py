@@ -1,8 +1,9 @@
 """MCP Server for Calculator tool."""
-import sys
-import os
 
-# Add project root to path for imports
+import os
+import sys
+
+# Add project root to path for standalone execution
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mcp.server.fastmcp import FastMCP

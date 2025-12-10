@@ -6,64 +6,92 @@ A web-based interface for verifying and testing your MCP (Model Context Protocol
 
 1. **Web Server (`web/server.py`)**: Acts as a WebSocket Hub.
 2. **Web Client (`http://localhost:8888`)**: Connects to the Hub to send requests.
-3. **MCP Tool (`mcp_pipe.py`)**: Connects to the Hub to execute requests.
+3. **MCP Pipe (`mcp_pipe.py`)**: Connects to the Hub to execute requests from configured MCP servers.
 
 ## Setup
 
-1.  **Create and activate a virtual environment:**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
+### Option 1: Install with pip (Recommended)
 
-2.  **Install dependencies:**
-    ```bash
-    pip3 install -r requirements.txt
-    ```
+```bash
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install package with dependencies
+pip install -e .
+
+# Or install with dev tools (ruff, mypy, pytest)
+pip install -e ".[dev]"
+```
+
+### Option 2: Install from requirements.txt
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip3 install -r requirements.txt
+```
 
 ## Configuration
 
-The application is configured to handle environment variables flexibly for both Development and Docker environments:
+Create a `.env` file (copy from `.env.example`):
 
-*   **Development**: Create a `.env` file (copy from `.env.example`). Variables in this file will be loaded automatically.
-*   **Docker**: Use standard OS environment variables (e.g., `docker run -e MCP_ENDPOINT=...`). These take precedence and are respected.
-
-**Example `.env`:**
 ```bash
 MCP_ENDPOINT=ws://localhost:8889/mcp
 ```
 
-## How to Run
+Configure your MCP servers in `mcp_config.json`:
 
-You need to run two separate terminal commands:
+```json
+{
+  "mcpServers": {
+    "calculator": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["mcp_server/calculator_server.py"]
+    }
+  }
+}
+```
+
+## How to Run
 
 ### Terminal 1: Start the Web Server (Hub)
 
-This starts the web UI and the WebSocket server.
-
 ```bash
-# From the project root
 cd web
 python3 server.py
 ```
-*   **Web UI:** http://localhost:8888
-*   **WebSocket Hub:** ws://localhost:8889
+- **Web UI:** http://localhost:8888
+- **WebSocket Hub:** ws://localhost:8889
 
-### Terminal 2: Connect Your MCP Tool
-
-This connects your Python MCP tool to the Web Server's hub using `mcp_pipe.py`.
+### Terminal 2: Connect MCP Tools
 
 ```bash
-# From the project root
 export MCP_ENDPOINT=ws://localhost:8889/mcp
-python3 mcp_pipe.py tools/agent_tools.py
+
+# Run all servers from mcp_config.json
+python3 mcp_pipe.py
+
+# Or run a specific server script
+python3 mcp_pipe.py mcp_server/calculator_server.py
 ```
 
-*Note: You can replace `tools/agent_tools.py` with any text-based MCP tool script (e.g., `tools/calculator.py`).*
+## Project Structure
+
+```
+├── src/mcp_xiaozhi/     # Core WebSocket-stdio bridge package
+├── tools/               # Tool functions (calculator, search, news)
+├── mcp_server/          # MCP server scripts
+├── web/                 # Web interface
+├── pyproject.toml       # Python project configuration
+├── mcp_config.json      # MCP server definitions
+└── mcp_pipe.py          # Entry point script
+```
 
 ## Usage
 
 1. Open http://localhost:8888 in your browser.
-2. Click **Connect** (The status should change to "Waiting...").
-3. Once Terminal 2 is running, the status will change to **Connected**.
+2. Click **Connect** (status shows "Waiting...").
+3. Once Terminal 2 is running, status changes to **Connected**.
 4. Use the tool forms to test your agents!

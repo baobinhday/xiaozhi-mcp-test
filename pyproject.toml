@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-xiaozhi"
+version = "0.3.0"
+description = "MCP WebSocket-stdio bridge with agent tools"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "MCP Xiaozhi Team"}
+]
+keywords = ["mcp", "websocket", "agent", "tools"]
+
+dependencies = [
+    "mcp>=1.8.1",
+    "websockets>=11.0.3",
+    "python-dotenv>=1.0.0",
+    "mcp-proxy>=0.8.2",
+    "ddgs",
+    "feedparser>=6.0.11",
+    "requests",
+    "beautifulsoup4>=4.12.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+mcp-pipe = "mcp_xiaozhi.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
