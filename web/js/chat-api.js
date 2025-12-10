@@ -214,6 +214,7 @@ async function sendChatRequest(baseUrl, token, model, messages, tools, assistant
       // Show tool execution status
       updateAssistantMessage(assistantDiv, `🔧 Calling tool: ${toolName}...`);
       log('info', `Executing tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
+      displayRequest(toolArgs);
 
       try {
         // Execute tool via MCP
@@ -366,7 +367,7 @@ function updateAssistantMessage(div, content, isError = false) {
     div.innerHTML = `
       <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed bg-red-500/10 text-red-400 border border-red-500/20 rounded-bl-sm whitespace-pre-wrap">${escapeHtml(content)}</div>
       <div class="speak-controls">
-        <button class="regenerate-btn" title="Regenerate response">
+        <button class="regenerate-btn icon-btn" title="Regenerate response">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"></polyline>
             <polyline points="1 20 1 14 7 14"></polyline>
@@ -388,18 +389,18 @@ function updateAssistantMessage(div, content, isError = false) {
         <select class="tts-voice-select" onchange="setTtsVoice(this.value)" title="Select voice">
           ${getVoiceOptionsHtml()}
         </select>
-        <button class="speak-btn" title="Speak message" data-speak-text="${parseTextFromMarkDown(content)}">
+        <button class="speak-btn icon-btn" title="Speak message" data-speak-text="${parseTextFromMarkDown(content)}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z"/>
           </svg>
         </button>
-        <button class="copy-btn" title="Copy to clipboard" data-copy-text="${parseTextFromMarkDown(content)}">
+        <button class="copy-btn icon-btn" title="Copy to clipboard" data-copy-text="${parseTextFromMarkDown(content)}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
         </button>
-        <button class="regenerate-btn" title="Regenerate response">
+        <button class="regenerate-btn icon-btn" title="Regenerate response">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"></polyline>
             <polyline points="1 20 1 14 7 14"></polyline>
@@ -467,14 +468,42 @@ function addChatMessage(content, role) {
     emptyState.remove();
   }
 
-  const messageDiv = document.createElement('div');
-  const roleClasses = role === 'user'
-    ? 'self-end bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-br-sm selection:bg-blue-100! selection:text-neutral-700'
-    : 'self-start bg-[#1c1c26] text-zinc-200 border border-white/10 rounded-bl-sm';
+  if (role === 'user') {
+    // Create wrapper for user message with edit button
+    const messageWrapper = document.createElement('div');
+    messageWrapper.className = 'chat-message-wrapper max-w-[80%] self-end';
+    messageWrapper.setAttribute('data-message-content', content);
 
-  messageDiv.className = `chat-message max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${roleClasses}`;
-  messageDiv.textContent = content;
-  elements.chatBody.appendChild(messageDiv);
+    messageWrapper.innerHTML = `
+      <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-br-sm selection:bg-blue-100! selection:text-neutral-700">${escapeHtml(content)}</div>
+      <div class="speak-controls">
+        <button class="edit-btn icon-btn" title="Edit message">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
+      </div>
+    `;
+
+    // Add event listener to edit button
+    const editBtn = messageWrapper.querySelector('.edit-btn');
+    if (editBtn) {
+      editBtn.addEventListener('click', function () {
+        editUserMessage(messageWrapper);
+      });
+    }
+
+    elements.chatBody.appendChild(messageWrapper);
+  } else {
+    // Assistant message (keep existing behavior)
+    const messageDiv = document.createElement('div');
+    const roleClasses = 'self-start bg-[#1c1c26] text-zinc-200 border border-white/10 rounded-bl-sm';
+
+    messageDiv.className = `chat-message max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${roleClasses}`;
+    messageDiv.textContent = content;
+    elements.chatBody.appendChild(messageDiv);
+  }
 
   elements.chatBody.scrollTop = elements.chatBody.scrollHeight;
 }
@@ -532,6 +561,141 @@ async function regenerateResponse(currentDiv) {
   await callChatAPI();
 }
 
+// ============================================
+// Edit User Message
+// ============================================
+function editUserMessage(messageWrapper) {
+  // Prevent editing if currently generating
+  if (state.isGenerating) {
+    log('warning', 'Please wait for the current response to complete');
+    return;
+  }
+
+  const currentContent = messageWrapper.getAttribute('data-message-content');
+  const messageDiv = messageWrapper.querySelector('.chat-message');
+
+  // Create textarea for editing
+  const textarea = document.createElement('textarea');
+  textarea.className = 'w-full px-4 py-3 bg-[#16161d] border border-indigo-500/50 rounded-lg text-white text-sm font-sans resize-none min-h-[44px] focus:outline-none focus:border-indigo-500 focus:shadow-[0_0_20px_rgba(99,102,241,0.2)] transition-all';
+  textarea.value = currentContent;
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+
+  // Replace message div with textarea
+  messageDiv.replaceWith(textarea);
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+  // Auto-resize textarea
+  textarea.addEventListener('input', () => {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+  });
+
+  // Create action buttons
+  const actionDiv = document.createElement('div');
+  actionDiv.className = 'flex gap-2 mt-2';
+  actionDiv.innerHTML = `
+    <button class="save-edit-btn px-3 py-1.5 bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded text-xs font-medium hover:shadow-lg transition-all cursor-pointer border-0">
+      Save
+    </button>
+    <button class="cancel-edit-btn px-3 py-1.5 bg-[#1c1c26] border border-white/10 rounded text-zinc-400 text-xs font-medium hover:bg-[#272732] hover:text-zinc-200 transition-all cursor-pointer">
+      Cancel
+    </button>
+  `;
+
+  messageWrapper.appendChild(actionDiv);
+
+  // Handle save
+  const saveBtn = actionDiv.querySelector('.save-edit-btn');
+  saveBtn.addEventListener('click', () => {
+    const newContent = textarea.value.trim();
+    if (!newContent) {
+      log('warning', 'Message cannot be empty');
+      return;
+    }
+
+    // Find the index of this message in the chat history
+    const allMessageWrappers = Array.from(elements.chatBody.querySelectorAll('.chat-message-wrapper, .chat-message'));
+    const currentIndex = allMessageWrappers.indexOf(messageWrapper);
+
+    if (currentIndex === -1) {
+      log('error', 'Could not find message to edit');
+      return;
+    }
+
+    // Remove all messages after this one from the DOM
+    for (let i = allMessageWrappers.length - 1; i > currentIndex; i--) {
+      allMessageWrappers[i].remove();
+    }
+
+    // Find this message in chat history and remove everything after it
+    let userMessageIndex = -1;
+    let userMessageCount = 0;
+
+    for (let i = 0; i < state.chatHistory.length; i++) {
+      if (state.chatHistory[i].role === 'user') {
+        if (userMessageCount === Math.floor(currentIndex / 2)) {
+          userMessageIndex = i;
+          break;
+        }
+        userMessageCount++;
+      }
+    }
+
+    if (userMessageIndex !== -1) {
+      // Remove all messages after this user message
+      state.chatHistory = state.chatHistory.slice(0, userMessageIndex);
+
+      // Update the user message content in history
+      state.chatHistory.push({ role: 'user', content: newContent });
+    } else {
+      // If we can't find it, just clear everything and add the edited message
+      state.chatHistory = [{ role: 'user', content: newContent }];
+    }
+
+    // Update the message wrapper
+    messageWrapper.setAttribute('data-message-content', newContent);
+
+    // Restore the message div
+    const newMessageDiv = document.createElement('div');
+    newMessageDiv.className = 'chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-br-sm selection:bg-blue-100! selection:text-neutral-700';
+    newMessageDiv.textContent = newContent;
+
+    textarea.replaceWith(newMessageDiv);
+    actionDiv.remove();
+
+    log('success', 'Message edited and subsequent messages cleared');
+
+    // Auto-send the edited message
+    callChatAPI();
+  });
+
+  // Handle cancel
+  const cancelBtn = actionDiv.querySelector('.cancel-edit-btn');
+  cancelBtn.addEventListener('click', () => {
+    // Restore original message div
+    const restoredMessageDiv = document.createElement('div');
+    restoredMessageDiv.className = 'chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-br-sm selection:bg-blue-100! selection:text-neutral-700';
+    restoredMessageDiv.textContent = currentContent;
+
+    textarea.replaceWith(restoredMessageDiv);
+    actionDiv.remove();
+
+    log('info', 'Edit cancelled');
+  });
+
+  // Handle Enter key to save (Shift+Enter for new line)
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      saveBtn.click();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelBtn.click();
+    }
+  });
+}
 
 // ============================================
 // Chat History
