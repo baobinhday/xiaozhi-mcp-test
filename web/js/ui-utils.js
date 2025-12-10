@@ -141,6 +141,20 @@ function clearResponse() {
   `;
 }
 
+function displayRequest(data) {
+  const html = syntaxHighlightJSON(data);
+  elements.requestContent.innerHTML = `<div class="json-viewer max-h-[calc(100vh-148px)] md:max-h-[calc(100vh-600px)] font-mono text-sm leading-relaxed whitespace-pre-wrap break-words">${html}</div>`;
+}
+
+function clearRequest() {
+  elements.requestContent.innerHTML = `
+    <div class="empty-state flex flex-col items-center justify-center h-full text-zinc-500 gap-4 min-h-[200px]">
+      <span class="empty-icon text-4xl opacity-50">📤</span>
+      <p class="text-sm">Execute a tool to see request parameters here</p>
+    </div>
+  `;
+}
+
 function syntaxHighlightJSON(obj) {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(

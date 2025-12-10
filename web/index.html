@@ -89,6 +89,12 @@
                     </button>
                     <button
                         class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-zinc-400 text-sm font-medium hover:bg-[#16161d] hover:text-zinc-200 transition-all cursor-pointer"
+                        data-tab="request">
+                        <span class="tab-icon">📤</span>
+                        Request
+                    </button>
+                    <button
+                        class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-zinc-400 text-sm font-medium hover:bg-[#16161d] hover:text-zinc-200 transition-all cursor-pointer"
                         data-tab="chat">
                         <span class="tab-icon">💬</span>
                         Chat
@@ -108,6 +114,23 @@
                             class="empty-state flex flex-col items-center justify-center h-full text-zinc-500 gap-4 min-h-[200px]">
                             <span class="empty-icon text-4xl opacity-50">📭</span>
                             <p class="text-sm">Execute a tool to see results here</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Request Tab Content -->
+                <div class="tab-content hidden flex-col flex-1 min-h-0" id="request-tab">
+                    <div class="panel-header flex justify-between items-center px-5 py-4 border-b border-white/5">
+                        <h2 class="font-semibold text-base">Request</h2>
+                        <button
+                            class="btn btn-small btn-secondary inline-flex items-center justify-center px-3 py-1.5 bg-[#1c1c26] text-zinc-400 border border-white/10 rounded text-xs font-medium hover:bg-[#272732] hover:text-zinc-200 transition-all cursor-pointer"
+                            onclick="clearRequest()">Clear</button>
+                    </div>
+                    <div class="response-content flex-1 p-4 overflow-y-auto custom-scrollbar" id="request-content">
+                        <div
+                            class="empty-state flex flex-col items-center justify-center h-full text-zinc-500 gap-4 min-h-[200px]">
+                            <span class="empty-icon text-4xl opacity-50">📤</span>
+                            <p class="text-sm">Execute a tool to see request parameters here</p>
                         </div>
                     </div>
                 </div>

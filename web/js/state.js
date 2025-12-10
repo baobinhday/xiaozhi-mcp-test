@@ -40,6 +40,7 @@ const elements = {
   connectionStatus: document.getElementById('connection-status'),
   responsePanel: document.querySelector('.response-panel'),
   responseContent: document.getElementById('response-content'),
+  requestContent: document.getElementById('request-content'),
   logContent: document.getElementById('log-content'),
   toolNav: document.querySelector('.tool-nav'),
   toolPanel: document.querySelector('.tool-panel'),
