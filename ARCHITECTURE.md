@@ -1,131 +1,219 @@
 # CLAUDE.md
-# ARCHITECTURE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to anyone when working with code in this repository.
 
-# Project Overview
+## Project Overview
 
-This project (`mcp-xiaozhi`) serves as a bridge for integrating local Python-based agent tools with a larger ecosystem, likely a Multi-Agent Communication Protocol (MCP) server. It leverages WebSockets for communication and `stdio` for interacting with local processes. The core functionality revolves around the `mcp_pipe.py` script, which manages connections and process I/O, and `agent_tools.py`, which defines specific agent capabilities.
+MCP Xiaozhi is a WebSocket-to-stdio bridge for integrating Python-based MCP (Model Context Protocol) tools with remote systems. It manages communication between local MCP servers and WebSocket endpoints through a central hub.
 
 ## Architecture
 
-The project architecture consists of two main Python components:
+### Core Components
 
-1.  **`mcp_pipe.py`**: This script acts as a robust WebSocket-to-stdio pipe. Its responsibilities include:
-    *   Connecting to a specified MCP WebSocket endpoint (`MCP_ENDPOINT`).
-    *   Managing local Python processes (agent tools).
-    *   Piping `stdin`, `stdout`, and `stderr` between the WebSocket connection and the local processes.
-    *   Implementing reconnection logic with exponential backoff for resilience.
-    *   Loading configuration from `.env` (for `MCP_ENDPOINT`) and optionally `mcp_config.json` for defining multiple MCP servers and their execution commands.
+The system consists of three main components:
 
-2.  **`agent_tools.py`**: This script defines the actual functionalities (tools) that the agent provides. It uses the `FastMCP` framework (imported from `mcp.server.fastmcp`) to expose these tools. Currently, it includes:
-    *   `tim_kiem_web`: A web search tool utilizing DuckDuckGo (`ddgs` library) for querying information.
-    *   `doc_tin_tuc_moi_nhat`: A news aggregation tool that fetches the latest news from prominent Vietnamese news sources via RSS feeds (`feedparser` library).
-    *   It communicates via `stdio`, which `mcp_pipe.py` then handles for WebSocket transport.
+1. **Web Hub (`web/server.py`)**: WebSocket server that acts as a central hub, managing connections between browser UI and MCP tools
+2. **Web Client (`http://localhost:8888`)**: Browser interface that connects to the hub to send tool requests
+3. **MCP Pipe (`mcp_pipe.py`)**: Connects to the hub to execute requests from configured MCP servers
 
-## Data Flow
+### Data Flow
 
-1.  The `mcp_pipe.py` script starts, reads the `MCP_ENDPOINT` from the environment, and then either launches a specified agent script (like `agent_tools.py`) or all configured agents from `mcp_config.json`.
-2.  `mcp_pipe.py` establishes a WebSocket connection to the `MCP_ENDPOINT`.
-3.  Concurrently, `mcp_pipe.py` starts the local agent process(es) (e.g., `agent_tools.py`) and redirects their `stdin`, `stdout`, and `stderr`.
-4.  Messages from the MCP WebSocket server are piped to the `stdin` of the local agent process.
-5.  Output from the `stdout` of the local agent process is sent back to the MCP WebSocket server.
-6.  `stderr` from the local agent process is printed to the terminal where `mcp_pipe.py` is running, aiding in debugging.
-
-## Setup and Running
-
-### Prerequisites
-
-*   Python 3.x
-*   `pip` (Python package installer)
-*   `git` (for cloning the repository)
-*   `ffmpeg`, `libsdl2-dev`, `libsdl2-image-dev`, `libsdl2-mixer-dev`, `libsdl2-ttf-dev` (These seem to be dependencies for a broader system, possibly related to `xiaozhi`'s multimedia capabilities, though not directly used by `agent_tools.py` itself).
-
-### Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/thanhtantran/mcp-server-xiaozhi # Or the specific repository
-    cd mcp-server-xiaozhi # Or your project directory
-    ```
-
-2.  **Install system dependencies (if needed):**
-    ```bash
-    sudo apt install -y python3 python3-pip git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
-    ```
-    *(Note: These dependencies might be for other parts of the "xiaozhi" project and not strictly for `mcp_pipe.py` or `agent_tools.py`.)*
-
-3.  **Create a `.env` file:**
-    Create a file named `.env` in the project root and add your MCP WebSocket endpoint:
-    ```
-    MCP_ENDPOINT="wss://your-mcp-server-endpoint.com/ws"
-    ```
-    Replace `"wss://your-mcp-server-endpoint.com/ws"` with the actual WebSocket URL of your MCP server.
-
-4.  **Install Python dependencies:**
-    ```bash
-    pip3 install -r requirements.txt
-    ```
-
-### Running the Agent
-
-To start the `agent_tools.py` as an MCP service, run `mcp_pipe.py` with `agent_tools.py` as an argument:
-
-```bash
-python3 mcp_pipe.py agent_tools.py
+```
+┌─────────────┐      WebSocket      ┌─────────────┐      stdio      ┌─────────────┐
+│  Web Hub    │ ◄─────────────────► │  mcp_pipe   │ ◄──────────────► │ MCP Server  │
+│ (server.py) │                     │             │                  │ (FastMCP)   │
+└─────────────┘                     └─────────────┘                  └─────────────┘
 ```
 
-This command will:
-1.  Connect to the `MCP_ENDPOINT` specified in your `.env` file.
-2.  Launch `agent_tools.py` as a subprocess.
-3.  Pipe communication between the MCP WebSocket server and `agent_tools.py`'s `stdio`.
+1. `mcp_pipe.py` reads `MCP_ENDPOINT` and `mcp_config.json`
+2. Connects to WebSocket endpoint for each enabled server
+3. Spawns MCP server subprocess (e.g., `calculator_server.py`)
+4. Pipes WebSocket messages to subprocess stdin
+5. Pipes subprocess stdout back to WebSocket
+6. Logs subprocess stderr to terminal
+
+### Core Package (`src/mcp_xiaozhi/`)
+
+| Module | Purpose |
+|--------|---------|
+| `main.py` | Entry point, server orchestration |
+| `config.py` | Configuration loading from `.env` and `mcp_config.json` |
+| `connection.py` | WebSocket connection with exponential backoff retry |
+| `pipe.py` | stdin/stdout/stderr piping between WebSocket and subprocess |
+| `server_builder.py` | Build server commands from config |
+| `utils.py` | Shared utilities (logging, Windows encoding fix) |
+
+### Tools Package (`tools/`)
+
+| Tool | Function | Description |
+|------|----------|-------------|
+| `math_tools.py` | `calculator()` | Safe mathematical expression evaluation |
+| `search_tools.py` | `web_search()` | DuckDuckGo web search |
+| `news_tools.py` | `get_latest_news()` | VNExpress RSS news fetching |
+
+### MCP Servers (`mcp_server/`)
+
+| Server | Tools Exposed |
+|--------|---------------|
+| `calculator_server.py` | `calculator` |
+| `search_server.py` | `get_latest_news` |
 
 ## Development Commands
 
-### Running tests
+### Setup
 ```bash
-# There is a test calculator tool in test/calculator.py that can be used for testing
-python3 test/calculator.py
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install package with dependencies
+pip install -e .
+
+# Or install with dev tools (ruff, mypy, pytest)
+pip install -e ".[dev]"
+
+# Or use requirements.txt
+pip install -r requirements.txt
 ```
 
-### Running with configuration file
+### Running the System
+
 ```bash
-# Run with mcp_config.json (if available)
+# Terminal 1: Web Hub
+cd web
+python3 server.py
+
+# Terminal 2: MCP Tools
+export MCP_ENDPOINT=ws://localhost:8889/mcp
 python3 mcp_pipe.py
 ```
 
-### Running specific agent tools
+### Alternative Run Options
 ```bash
-# Run a single local server script
-python3 mcp_pipe.py path/to/server.py
+# Run a specific server script
+python3 mcp_pipe.py mcp_server/calculator_server.py
+
+# Using the installed command
+export MCP_ENDPOINT=ws://localhost:8889/mcp
+mcp-pipe
+
+# Run with specific server
+mcp-pipe mcp_server/calculator_server.py
 ```
 
-## Extending Functionality
+### Development Tools
 
-New tools can be added to `agent_tools.py` by defining functions and decorating them with `@mcp.tool()`. These tools will then be automatically exposed through the `FastMCP` server when `agent_tools.py` is run via `mcp_pipe.py`.
+```bash
+# Linting with ruff
+ruff check src/ tools/ mcp_server/
 
-## Configuration Options
+# Type checking with mypy
+mypy src/ tools/ mcp_server/
 
-The system supports configuration through:
-1. Environment variables (`.env` file)
-2. Optional `mcp_config.json` file for defining multiple MCP servers and their execution commands
+# Run tests (if any exist)
+pytest
 
-Configuration priority:
-- If target matches a server in config.mcpServers: use its definition
-- Else: treat target as a Python script path (back-compat)
+# Format code with ruff
+ruff format src/ tools/ mcp_server/
+```
 
-## Development Workflow
+## Configuration
 
-1.  **Define new tools** in `agent_tools.py` (or a similar script).
-2.  **Ensure `MCP_ENDPOINT` is configured** in `.env`.
-3.  **Run `mcp_pipe.py`** pointing to your agent script to test and deploy.
-4.  **Monitor logs** from `mcp_pipe.py` for connection status and any `stderr` output from your agent tools.
+### Environment Variables (`.env`)
+```bash
+MCP_ENDPOINT=ws://localhost:8889/mcp
+```
+
+### Server Config (`mcp_config.json`)
+```json
+{
+  "mcpServers": {
+    "calculator": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["mcp_server/calculator_server.py"],
+      "disabled": false
+    },
+    "search_and_news": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["mcp_server/search_server.py"]
+    },
+    "perplexity": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "perplexity-mcp"
+      ],
+      "env": {
+        "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+## Adding New Tools
+
+1. Create tool function in `tools/`:
+   ```python
+   # tools/my_tools.py
+   def my_tool(param: str) -> dict:
+       """Tool description."""
+       return {"success": True, "result": "..."}
+   ```
+
+2. Create MCP server in `mcp_server/`:
+   ```python
+   # mcp_server/my_server.py
+   import os, sys
+   sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+   from mcp.server.fastmcp import FastMCP
+   from tools.my_tools import my_tool
+
+   mcp = FastMCP("MyServer")
+   mcp.tool()(my_tool)
+
+   if __name__ == "__main__":
+       mcp.run(transport="stdio")
+   ```
+
+3. Add to `mcp_config.json`:
+   ```json
+   "my_server": {
+     "type": "stdio",
+     "command": "python",
+     "args": ["mcp_server/my_server.py"]
+   }
+   ```
 
 ## Project Structure
 
-- `mcp_pipe.py`: Main WebSocket-to-stdio bridge with reconnection logic
-- `agent_tools.py`: Defines the agent's capabilities and tools
-- `requirements.txt`: Python dependencies
-- `test/calculator.py`: Example test calculator tool
-- `.env.local`: Environment variables including MCP_ENDPOINT
-- `Readme.md`: Basic setup instructions
+```
+├── src/mcp_xiaozhi/          # Core WebSocket-stdio bridge package
+│   ├── __init__.py
+│   ├── main.py               # Entry point
+│   ├── config.py             # Configuration
+│   ├── connection.py         # WebSocket handling
+│   ├── pipe.py               # I/O piping
+│   ├── server_builder.py     # Command building
+│   └── utils.py              # Utilities
+├── tools/                    # Tool implementations
+│   ├── math_tools.py
+│   ├── search_tools.py
+│   └── news_tools.py
+├── mcp_server/               # MCP server scripts
+│   ├── calculator_server.py
+│   └── search_server.py
+├── web/                      # Web interface and hub
+│   ├── server.py             # WebSocket hub
+│   ├── index.html            # Web UI
+│   └── app.js                # Client-side JavaScript
+├── pyproject.toml            # Project config & dependencies
+├── requirements.txt          # Legacy dependencies
+├── mcp_config.json           # MCP server definitions
+├── mcp_pipe.py               # Entry point wrapper
+└── ARCHITECTURE.md           # Architecture documentation
+```

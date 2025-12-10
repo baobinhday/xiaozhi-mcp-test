@@ -1,0 +1,111 @@
+"""WebSocket connection handling for MCP Xiaozhi."""
+
+import asyncio
+import logging
+import subprocess
+from typing import Optional
+
+import websockets
+
+from .config import INITIAL_BACKOFF, MAX_BACKOFF
+from .pipe import (
+    pipe_process_stderr_to_terminal,
+    pipe_process_to_websocket,
+    pipe_websocket_to_process,
+)
+from .server_builder import build_server_command
+
+logger = logging.getLogger("MCP_PIPE")
+
+
+async def connect_with_retry(uri: str, target: str) -> None:
+    """Connect to WebSocket server with retry mechanism.
+
+    Args:
+        uri: WebSocket endpoint URI
+        target: Server target name
+    """
+    reconnect_attempt = 0
+    backoff = INITIAL_BACKOFF
+
+    while True:  # Infinite reconnection
+        try:
+            if reconnect_attempt > 0:
+                logger.info(
+                    f"[{target}] Waiting {backoff}s before reconnection "
+                    f"attempt {reconnect_attempt}..."
+                )
+                await asyncio.sleep(backoff)
+
+            # Attempt to connect
+            await connect_to_server(uri, target)
+
+        except Exception as e:
+            reconnect_attempt += 1
+            logger.warning(
+                f"[{target}] Connection closed (attempt {reconnect_attempt}): {e}"
+            )
+            # Calculate wait time for next reconnection (exponential backoff)
+            backoff = min(backoff * 2, MAX_BACKOFF)
+
+
+async def connect_to_server(uri: str, target: str) -> None:
+    """Connect to WebSocket server and pipe stdio.
+
+    Args:
+        uri: WebSocket endpoint URI
+        target: Server target name
+    """
+    process: Optional[subprocess.Popen] = None
+
+    try:
+        logger.info(f"[{target}] Connecting to WebSocket server...")
+
+        # Add server name to URI for hub identification
+        ws_uri = (
+            f"{uri}?server={target}"
+            if "?" not in uri
+            else f"{uri}&server={target}"
+        )
+
+        async with websockets.connect(ws_uri) as websocket:
+            logger.info(f"[{target}] Successfully connected to WebSocket server")
+
+            # Start server process (built from CLI arg or config)
+            cmd, env = build_server_command(target)
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                encoding="utf-8",
+                text=True,
+                env=env,
+            )
+            logger.info(f"[{target}] Started server process: {' '.join(cmd)}")
+
+            # Create tasks for bidirectional communication
+            await asyncio.gather(
+                pipe_websocket_to_process(websocket, process, target),
+                pipe_process_to_websocket(process, websocket, target),
+                pipe_process_stderr_to_terminal(process, target),
+            )
+
+    except websockets.exceptions.ConnectionClosed as e:
+        logger.error(f"[{target}] WebSocket connection closed: {e}")
+        raise  # Re-throw exception to trigger reconnection
+
+    except Exception as e:
+        logger.error(f"[{target}] Connection error: {e}")
+        raise  # Re-throw exception
+
+    finally:
+        # Ensure the child process is properly terminated
+        if process is not None:
+            logger.info(f"[{target}] Terminating server process")
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            logger.info(f"[{target}] Server process terminated")

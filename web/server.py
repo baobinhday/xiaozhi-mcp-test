@@ -48,8 +48,10 @@ class WebSocketHub:
     
     def __init__(self):
         self.browser_clients = set()  # Browser UI connections
-        self.mcp_tool = None          # Single MCP tool connection
-        self.mcp_tool_name = None
+        self.mcp_tools = {}           # Dict: server_name -> websocket
+        self.server_tools = {}        # Dict: server_name -> list of tools
+        self.tool_registry = {}       # Dict: tool_name -> server_name (for routing)
+        self.pending_inits = set()    # Track servers waiting for initialize response
         
     async def register_browser(self, websocket):
         """Register a browser client."""
@@ -63,26 +65,50 @@ class WebSocketHub:
         self.browser_clients.discard(websocket)
         logger.info(f"Browser disconnected. Total: {len(self.browser_clients)}")
         
-    async def register_mcp(self, websocket, tool_name: str = "unknown"):
+    async def register_mcp(self, websocket, server_name: str = "unknown"):
         """Register an MCP tool."""
-        if self.mcp_tool:
-            logger.warning("Replacing existing MCP tool connection")
-            try:
-                await self.mcp_tool.close()
-            except:
-                pass
-        self.mcp_tool = websocket
-        self.mcp_tool_name = tool_name
-        logger.info(f"MCP tool connected: {tool_name}")
+        self.mcp_tools[server_name] = websocket
+        self.server_tools[server_name] = []  # Will be populated when tools/list response arrives
+        self.pending_inits.add(server_name)  # Track that we're waiting for init response
+        logger.info(f"MCP server connected: {server_name}")
+        
+        # Initialize the MCP server
+        try:
+            init_request = {
+                "jsonrpc": "2.0",
+                "id": f"hub_init_{server_name}",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "MCP Hub",
+                        "version": "1.0.0"
+                    }
+                }
+            }
+            await websocket.send(json.dumps(init_request))
+            logger.info(f"Sent initialize request to server '{server_name}'")
+            # Will request tools when we receive the initialize response
+        except Exception as e:
+            logger.error(f"Failed to send initialize to '{server_name}': {e}")
+            self.pending_inits.discard(server_name)
+        
         # Notify all browsers
         await self.broadcast_status()
         
-    async def unregister_mcp(self):
-        """Unregister the MCP tool."""
-        self.mcp_tool = None
-        tool_name = self.mcp_tool_name
-        self.mcp_tool_name = None
-        logger.info(f"MCP tool disconnected: {tool_name}")
+    async def unregister_mcp(self, server_name: str):
+        """Unregister an MCP tool."""
+        if server_name in self.mcp_tools:
+            del self.mcp_tools[server_name]
+        if server_name in self.server_tools:
+            # Remove tools from registry
+            for tool in self.server_tools[server_name]:
+                tool_name = tool.get("name")
+                if tool_name and self.tool_registry.get(tool_name) == server_name:
+                    del self.tool_registry[tool_name]
+            del self.server_tools[server_name]
+        logger.info(f"MCP server disconnected: {server_name}")
         # Notify all browsers
         await self.broadcast_status()
         
@@ -90,8 +116,8 @@ class WebSocketHub:
         """Send current connection status to a specific client."""
         status = {
             "type": "status",
-            "mcp_connected": self.mcp_tool is not None,
-            "mcp_tool_name": self.mcp_tool_name
+            "mcp_connected": len(self.mcp_tools) > 0,
+            "mcp_servers": list(self.mcp_tools.keys())
         }
         try:
             await websocket.send(json.dumps(status))
@@ -103,16 +129,32 @@ class WebSocketHub:
         for client in self.browser_clients.copy():
             await self.send_status(client)
             
-    async def forward_to_mcp(self, message: str) -> bool:
-        """Forward a message from browser to MCP tool."""
-        if not self.mcp_tool:
+    async def forward_to_mcp(self, message: str, server_name: str = None) -> bool:
+        """Forward a message from browser to specific MCP tool or broadcast to all."""
+        if not self.mcp_tools:
             return False
-        try:
-            await self.mcp_tool.send(message)
-            return True
-        except Exception as e:
-            logger.error(f"Error forwarding to MCP: {e}")
-            return False
+        
+        # If server_name is specified, route to that server
+        if server_name:
+            if server_name not in self.mcp_tools:
+                logger.error(f"Server '{server_name}' not found")
+                return False
+            try:
+                await self.mcp_tools[server_name].send(message)
+                return True
+            except Exception as e:
+                logger.error(f"Error forwarding to {server_name}: {e}")
+                return False
+        
+        # Otherwise, broadcast to all MCP servers (for initialize, etc.)
+        success = False
+        for name, websocket in self.mcp_tools.items():
+            try:
+                await websocket.send(message)
+                success = True
+            except Exception as e:
+                logger.error(f"Error forwarding to {name}: {e}")
+        return success
             
     async def forward_to_browsers(self, message: str):
         """Forward a message from MCP tool to all browser clients."""
@@ -121,6 +163,169 @@ class WebSocketHub:
                 await client.send(message)
             except:
                 pass
+    
+    async def handle_browser_message(self, message: str, websocket) -> bool:
+        """Intercept and handle browser messages. Returns True if handled, False otherwise."""
+        try:
+            msg = json.loads(message)
+            method = msg.get("method")
+            request_id = msg.get("id")
+            
+            # Intercept initialize - don't forward to MCP servers as they're already initialized
+            if method == "initialize":
+                logger.info("Intercepting initialize request from browser")
+                # Return a successful initialize response
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "serverInfo": {
+                            "name": "MCP Hub",
+                            "version": "1.0.0"
+                        }
+                    }
+                }
+                await websocket.send(json.dumps(response))
+                logger.info("Sent initialize response to browser")
+                return True
+            
+            # Intercept notifications/initialized - browser acknowledgment, don't forward
+            elif method == "notifications/initialized":
+                logger.info("Browser sent initialized notification")
+                return True  # Don't forward this
+            
+            # Intercept tools/list to aggregate from all servers
+            elif method == "tools/list":
+                logger.info("Intercepting tools/list request")
+                tools = self.get_cached_aggregated_tools()
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {"tools": tools}
+                }
+                await websocket.send(json.dumps(response))
+                logger.info(f"Returned {len(tools)} aggregated tools to browser")
+                return True
+            
+            # Intercept tools/call to route to correct server
+            elif method == "tools/call":
+                tool_name = msg.get("params", {}).get("name")
+                if tool_name:
+                    server_name = self.tool_registry.get(tool_name)
+                    if server_name:
+                        logger.info(f"Routing tools/call for '{tool_name}' to server '{server_name}'")
+                        return await self.forward_to_mcp(message, server_name)
+                    else:
+                        logger.warning(f"Tool '{tool_name}' not found in registry")
+                        error = {
+                            "jsonrpc": "2.0",
+                            "id": request_id,
+                            "error": {
+                                "code": -32601,
+                                "message": f"Tool '{tool_name}' not found"
+                            }
+                        }
+                        await websocket.send(json.dumps(error))
+                        return True
+            
+            # Other messages: broadcast to all servers
+            return False
+            
+        except json.JSONDecodeError:
+            return False
+    
+    async def handle_mcp_message(self, message: str, server_name: str):
+        """Intercept and cache MCP server responses, especially initialize and tools/list."""
+        try:
+            # Try to parse as JSON
+            msg = json.loads(message)
+            msg_id = msg.get("id", "")
+            logger.info(f"[{server_name}] Parsed message ID: {msg_id}, has result: {'result' in msg}, has tools: {'tools' in msg.get('result', {})}")
+            
+            # Check if this is an initialize response
+            if msg_id == f"hub_init_{server_name}" and "result" in msg:
+                logger.info(f"Received initialize response from '{server_name}'")
+                self.pending_inits.discard(server_name)
+                
+                # Send initialized notification (required by MCP protocol)
+                try:
+                    initialized_notification = {
+                        "jsonrpc": "2.0",
+                        "method": "notifications/initialized",
+                        "params": {}
+                    }
+                    if server_name in self.mcp_tools:
+                        await self.mcp_tools[server_name].send(json.dumps(initialized_notification))
+                        logger.info(f"Sent initialized notification to '{server_name}'")
+                except Exception as e:
+                    logger.error(f"Failed to send initialized notification to '{server_name}': {e}")
+                
+                # Now request tools from this server
+                try:
+                    tools_request = {
+                        "jsonrpc": "2.0",
+                        "id": f"hub_tools_{server_name}",
+                        "method": "tools/list",
+                        "params": {}
+                    }
+                    if server_name in self.mcp_tools:
+                        await self.mcp_tools[server_name].send(json.dumps(tools_request))
+                        logger.info(f"Requested tools from initialized server '{server_name}'")
+                except Exception as e:
+                    logger.error(f"Failed to request tools from '{server_name}': {e}")
+            
+            # Check if this is a tools/list response
+            elif "result" in msg and "tools" in msg.get("result", {}):
+                tools = msg["result"]["tools"]
+                self.server_tools[server_name] = tools
+                logger.info(f"✓ Cached {len(tools)} tools from server '{server_name}'")
+                
+                # Update tool registry for routing
+                for tool in tools:
+                    tool_name = tool.get("name")
+                    if tool_name:
+                        self.tool_registry[tool_name] = server_name
+                        logger.info(f"  - Registered tool '{tool_name}' from '{server_name}'")
+            else:
+                logger.debug(f"Message from {server_name} is not a tools/list response")
+                        
+        except (json.JSONDecodeError, KeyError) as e:
+            # Silently ignore non-JSON messages (debug output, logs, etc.)
+            logger.debug(f"Non-JSON or invalid message from {server_name}: {str(e)}")
+            pass
+    
+    def get_cached_aggregated_tools(self) -> list:
+        """Return aggregated tools from cache with conflict resolution."""
+        all_tools = []
+        tool_names_seen = set()
+        
+        for server_name, tools in self.server_tools.items():
+            for tool in tools:
+                tool_name = tool.get("name")
+                if not tool_name:
+                    continue
+                
+                # Create a copy to avoid modifying the cached tool
+                tool_copy = tool.copy()
+                
+                # Handle name conflicts: prefix with server name
+                if tool_name in tool_names_seen:
+                    prefixed_name = f"{server_name}.{tool_name}"
+                    logger.info(f"Tool name conflict: renaming '{tool_name}' to '{prefixed_name}'")
+                    tool_copy["name"] = prefixed_name
+                    tool_copy["description"] = f"[{server_name}] {tool.get('description', '')}"
+                    self.tool_registry[prefixed_name] = server_name
+                else:
+                    # Add server info to description
+                    tool_copy["description"] = f"[{server_name}] {tool.get('description', '')}"
+                    self.tool_registry[tool_name] = server_name
+                    tool_names_seen.add(tool_name)
+                
+                all_tools.append(tool_copy)
+        
+        return all_tools
 
 
 # Global hub instance
@@ -137,21 +342,24 @@ async def handle_connection(websocket, path):
     
     if path == "/mcp" or path.startswith("/mcp"):
         client_type = "mcp"
-        # Extract tool name from query string if present
-        tool_name = "unknown"
+        # Extract server name from query string
+        server_name = "unknown"
         if "?" in path:
             params = dict(p.split("=") for p in path.split("?")[1].split("&") if "=" in p)
-            tool_name = params.get("tool", "unknown")
-        await hub.register_mcp(websocket, tool_name)
+            server_name = params.get("server", "unknown")
+        await hub.register_mcp(websocket, server_name)
         
         try:
             async for message in websocket:
-                logger.debug(f"MCP → Browser: {message[:100]}...")
+                logger.info(f"MCP({server_name}) → Hub: {message[:150]}...")
+                # Intercept and cache MCP responses (especially tools/list)
+                await hub.handle_mcp_message(message, server_name)
+                # Forward to all browsers
                 await hub.forward_to_browsers(message)
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
-            await hub.unregister_mcp()
+            await hub.unregister_mcp(server_name)
             
     else:  # Default to browser client
         client_type = "browser"
@@ -160,6 +368,12 @@ async def handle_connection(websocket, path):
         try:
             async for message in websocket:
                 logger.debug(f"Browser → MCP: {message[:100]}...")
+                # Try to handle message (intercept tools/list and tools/call)
+                handled = await hub.handle_browser_message(message, websocket)
+                if handled:
+                    continue
+                
+                # Otherwise forward to all MCP servers
                 success = await hub.forward_to_mcp(message)
                 if not success:
                     # Send error back to browser
@@ -191,8 +405,10 @@ def run_http_server():
             super().__init__(*args, directory=str(WEB_DIR), **kwargs)
             
         def log_message(self, format, *args):
-            if "GET / " in args[0] or "GET /style" in args[0] or "GET /app" in args[0]:
-                logger.info(f"[HTTP] {args[0]}")
+            # Skip logging certain requests or handle errors
+            if args and isinstance(args[0], str):
+                if "GET / " in args[0] or "GET /style" in args[0] or "GET /app" in args[0]:
+                    logger.info(f"[HTTP] {args[0]}")
             
         def end_headers(self):
             self.send_header('Access-Control-Allow-Origin', '*')
