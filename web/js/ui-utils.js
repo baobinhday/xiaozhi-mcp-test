@@ -69,10 +69,31 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function parseMarkdownToHtml(mdString) {
+  marked.setOptions({
+    breaks: true,        // Convert \n to <br>
+    gfm: true,          // GitHub Flavored Markdown
+    headerIds: false,    // Don't add IDs to headers
+    mangle: false,       // Don't mangle email addresses
+  });
+
+  // Parse markdown to HTML
+  const htmlContent = marked.parse(mdString);
+  return htmlContent;
+}
+
+const parseTextFromMarkDown = (mdString) => {
+  const plainText = marked.parse(mdString, {
+    renderer: plainTextRenderer()
+  });
+  return plainText;
+}
+
 function escapeForJs(text) {
   return text
     .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
+    .replace(/"/g, '\\"')
     .replace(/\$/g, '\\$')
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r');
@@ -173,4 +194,88 @@ function log(type, message) {
 function clearLogs() {
   elements.logContent.innerHTML = '';
   log('info', 'Logs cleared');
+}
+
+function plainTextRenderer(options = {}) {
+  const render = new marked.Renderer();
+
+  const whitespaceDelimiter = options?.spaces ? ' ' : '\n';
+
+  // render just the text of a link
+  render.link = function (href, title, text) {
+    return text;
+  };
+
+  // render just the text of a paragraph
+  render.paragraph = function (text) {
+    return whitespaceDelimiter + text + whitespaceDelimiter
+  };
+
+  // render just the text of a heading element, but indecate level
+  render.heading = function (text) {
+    return text;
+  };
+
+  // render nothing for images
+  render.image = function () {
+    return '';
+  };
+
+  render.list = function (body) {
+    return body;
+  };
+
+  render.listitem = function (text) {
+    return '\t' + text + whitespaceDelimiter;
+  };
+
+  render.hr = function () {
+    return whitespaceDelimiter + whitespaceDelimiter;
+  };
+
+  render.table = function (header, body) {
+    return whitespaceDelimiter + header + whitespaceDelimiter + body + whitespaceDelimiter;
+  };
+
+  render.tablerow = function (content) {
+    return content + whitespaceDelimiter;
+  };
+
+  render.tablecell = function (content, flags) {
+    return content + '\t';
+  };
+
+  render.strong = function (text) {
+    return text;
+  };
+
+  render.em = function (text) {
+    return text;
+  };
+
+  render.codespan = function (text) {
+    return text;
+  };
+
+  render.code = function (code) {
+    return this.whitespaceDelimiter + this.whitespaceDelimiter + code + this.whitespaceDelimiter + this.whitespaceDelimiter;
+  };
+
+  render.br = function () {
+    return whitespaceDelimiter + whitespaceDelimiter;
+  };
+
+  render.del = function (text) {
+    return text;
+  };
+
+  render.blockquote = function (quote) {
+    return '\t' + quote + this.whitespaceDelimiter;
+  };
+
+  render.html = function (html) {
+    return html;
+  };
+
+  return render;
 }

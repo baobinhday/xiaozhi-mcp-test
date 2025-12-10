@@ -365,18 +365,19 @@ function updateAssistantMessage(div, content, isError = false) {
     div.className = 'chat-message-wrapper max-w-[80%] self-start';
     div.innerHTML = `
       <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed bg-red-500/10 text-red-400 border border-red-500/20 rounded-bl-sm whitespace-pre-wrap">${escapeHtml(content)}</div>
+      <div class="speak-controls">
+        <button class="regenerate-btn" title="Regenerate response">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
     `;
   } else {
-    // Configure marked for safe markdown rendering
-    marked.setOptions({
-      breaks: true,        // Convert \n to <br>
-      gfm: true,          // GitHub Flavored Markdown
-      headerIds: false,    // Don't add IDs to headers
-      mangle: false,       // Don't mangle email addresses
-    });
-
     // Parse markdown to HTML
-    const htmlContent = marked.parse(content);
+    const htmlContent = parseMarkdownToHtml(content);
 
     div.className = 'chat-message-wrapper max-w-[80%] self-start';
     div.innerHTML = `
@@ -387,12 +388,12 @@ function updateAssistantMessage(div, content, isError = false) {
         <select class="tts-voice-select" onchange="setTtsVoice(this.value)" title="Select voice">
           ${getVoiceOptionsHtml()}
         </select>
-        <button class="speak-btn" title="Speak message" data-speak-text="${escapeHtml(content)}">
+        <button class="speak-btn" title="Speak message" data-speak-text="${parseTextFromMarkDown(content)}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z"/>
           </svg>
         </button>
-        <button class="copy-btn" title="Copy to clipboard" data-copy-text="${escapeHtml(content)}">
+        <button class="copy-btn" title="Copy to clipboard" data-copy-text="${parseTextFromMarkDown(content)}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -447,15 +448,16 @@ function updateAssistantMessage(div, content, isError = false) {
         }
       });
     }
-
-    // Add event listener to the regenerate button
-    const regenerateBtn = div.querySelector('.regenerate-btn');
-    if (regenerateBtn) {
-      regenerateBtn.addEventListener('click', async function () {
-        await regenerateResponse(div);
-      });
-    }
   }
+
+  // Add event listener to the regenerate button
+  const regenerateBtn = div.querySelector('.regenerate-btn');
+  if (regenerateBtn) {
+    regenerateBtn.addEventListener('click', async function () {
+      await regenerateResponse(div);
+    });
+  }
+
   elements.chatBody.scrollTop = elements.chatBody.scrollHeight;
 }
 
@@ -467,7 +469,7 @@ function addChatMessage(content, role) {
 
   const messageDiv = document.createElement('div');
   const roleClasses = role === 'user'
-    ? 'self-end bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-br-sm'
+    ? 'self-end bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-br-sm selection:bg-blue-100! selection:text-neutral-700'
     : 'self-start bg-[#1c1c26] text-zinc-200 border border-white/10 rounded-bl-sm';
 
   messageDiv.className = `chat-message max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${roleClasses}`;
