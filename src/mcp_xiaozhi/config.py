@@ -8,7 +8,8 @@ from typing import Any, Dict, Optional
 from dotenv import load_dotenv
 
 # Auto-load environment variables from a .env file if present
-load_dotenv()
+# override=False ensures Docker/system env vars take precedence over .env file
+load_dotenv(override=False)
 
 logger = logging.getLogger("MCP_PIPE")
 

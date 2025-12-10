@@ -9,11 +9,16 @@ services:
     ports:
       - "8888:8888" # Web UI
       - "8889:8889" # WebSocket Hub
+    # Load environment from .env file if it exists (optional)
+    env_file:
+      - path: ./.env
+        required: false
     environment:
-      # Override these as needed
-      - MCP_ENDPOINT=ws://localhost:8889/mcp
-      # Optionally specify which MCP script to run
-      - MCP_SCRIPT=agent_tools.py
+      # These will override values from .env file
+      # MCP endpoint URL for WebSocket connection
+      - MCP_ENDPOINT=${MCP_ENDPOINT:-ws://localhost:8889/mcp}
+      # Path to MCP config file inside container
+      - MCP_CONFIG=${MCP_CONFIG:-/app/mcp_config.json}
     # If you need to persist any data
     # volumes:
     #   - ./data:/app/data

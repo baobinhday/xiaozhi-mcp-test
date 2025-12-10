@@ -43,8 +43,9 @@ COPY . .
 # 8889 for WebSocket hub
 EXPOSE 8888 8889
 
-# Default environment variables (can be overridden)
-ENV MCP_ENDPOINT=ws://localhost:8889/mcp
+# Runtime environment variables (can be overridden with -e or docker-compose)
+ENV MCP_ENDPOINT=ws://localhost:8889/mcp \
+    MCP_CONFIG=/app/mcp_config.json
 
 # Create a startup script to run both services
 RUN echo '#!/bin/bash\n\
@@ -58,9 +59,9 @@ RUN echo '#!/bin/bash\n\
     # Wait a bit for the web server to start\n\
     sleep 2\n\
     \n\
-    # Start the MCP pipe using installed package\n\
+    # Start the MCP pipe\n\
     echo "Starting MCP Pipe..."\n\
-    cd /app && mcp-pipe &\n\
+    cd /app && python3 mcp_pipe.py &\n\
     MCP_PID=$!\n\
     \n\
     # Wait for both processes\n\
