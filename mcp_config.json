@@ -21,7 +21,7 @@
             "args": [
                 "mcp_server/search_server.py"
             ],
-            "disabled": false
+            "disabled": true
         },
         "perplexity": {
             "type": "stdio",
