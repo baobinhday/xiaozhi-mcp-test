@@ -1,12 +1,36 @@
-# ARCHITECTURE.md
+# CLAUDE.md
 
-This file provides guidance when working with code in this repository.
+This file provides guidance to anyone when working with code in this repository.
 
 ## Project Overview
 
-MCP Xiaozhi is a WebSocket-to-stdio bridge for integrating Python-based MCP tools with remote systems. It manages communication between local MCP servers and WebSocket endpoints.
+MCP Xiaozhi is a WebSocket-to-stdio bridge for integrating Python-based MCP (Model Context Protocol) tools with remote systems. It manages communication between local MCP servers and WebSocket endpoints through a central hub.
 
 ## Architecture
+
+### Core Components
+
+The system consists of three main components:
+
+1. **Web Hub (`web/server.py`)**: WebSocket server that acts as a central hub, managing connections between browser UI and MCP tools
+2. **Web Client (`http://localhost:8888`)**: Browser interface that connects to the hub to send tool requests
+3. **MCP Pipe (`mcp_pipe.py`)**: Connects to the hub to execute requests from configured MCP servers
+
+### Data Flow
+
+```
+┌─────────────┐      WebSocket      ┌─────────────┐      stdio      ┌─────────────┐
+│  Web Hub    │ ◄─────────────────► │  mcp_pipe   │ ◄──────────────► │ MCP Server  │
+│ (server.py) │                     │             │                  │ (FastMCP)   │
+└─────────────┘                     └─────────────┘                  └─────────────┘
+```
+
+1. `mcp_pipe.py` reads `MCP_ENDPOINT` and `mcp_config.json`
+2. Connects to WebSocket endpoint for each enabled server
+3. Spawns MCP server subprocess (e.g., `calculator_server.py`)
+4. Pipes WebSocket messages to subprocess stdin
+5. Pipes subprocess stdout back to WebSocket
+6. Logs subprocess stderr to terminal
 
 ### Core Package (`src/mcp_xiaozhi/`)
 
@@ -34,41 +58,63 @@ MCP Xiaozhi is a WebSocket-to-stdio bridge for integrating Python-based MCP tool
 | `calculator_server.py` | `calculator` |
 | `search_server.py` | `get_latest_news` |
 
-## Data Flow
+## Development Commands
 
-```
-┌─────────────┐      WebSocket      ┌─────────────┐      stdio      ┌─────────────┐
-│  Web Hub    │ ◄─────────────────► │  mcp_pipe   │ ◄──────────────► │ MCP Server  │
-│ (server.py) │                     │             │                  │ (FastMCP)   │
-└─────────────┘                     └─────────────┘                  └─────────────┘
-```
-
-1. `mcp_pipe.py` reads `MCP_ENDPOINT` and `mcp_config.json`
-2. Connects to WebSocket endpoint for each enabled server
-3. Spawns MCP server subprocess (e.g., `calculator_server.py`)
-4. Pipes WebSocket messages to subprocess stdin
-5. Pipes subprocess stdout back to WebSocket
-6. Logs subprocess stderr to terminal
-
-## Setup
-
+### Setup
 ```bash
-# Install package
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install package with dependencies
 pip install -e .
+
+# Or install with dev tools (ruff, mypy, pytest)
+pip install -e ".[dev]"
 
 # Or use requirements.txt
 pip install -r requirements.txt
 ```
 
-## Running
+### Running the System
 
 ```bash
 # Terminal 1: Web Hub
-cd web && python3 server.py
+cd web
+python3 server.py
 
-# Terminal 2: MCP Servers
+# Terminal 2: MCP Tools
 export MCP_ENDPOINT=ws://localhost:8889/mcp
 python3 mcp_pipe.py
+```
+
+### Alternative Run Options
+```bash
+# Run a specific server script
+python3 mcp_pipe.py mcp_server/calculator_server.py
+
+# Using the installed command
+export MCP_ENDPOINT=ws://localhost:8889/mcp
+mcp-pipe
+
+# Run with specific server
+mcp-pipe mcp_server/calculator_server.py
+```
+
+### Development Tools
+
+```bash
+# Linting with ruff
+ruff check src/ tools/ mcp_server/
+
+# Type checking with mypy
+mypy src/ tools/ mcp_server/
+
+# Run tests (if any exist)
+pytest
+
+# Format code with ruff
+ruff format src/ tools/ mcp_server/
 ```
 
 ## Configuration
@@ -85,12 +131,24 @@ MCP_ENDPOINT=ws://localhost:8889/mcp
     "calculator": {
       "type": "stdio",
       "command": "python",
-      "args": ["mcp_server/calculator_server.py"]
+      "args": ["mcp_server/calculator_server.py"],
+      "disabled": false
     },
     "search_and_news": {
-      "type": "stdio", 
+      "type": "stdio",
       "command": "python",
       "args": ["mcp_server/search_server.py"]
+    },
+    "perplexity": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "perplexity-mcp"
+      ],
+      "env": {
+        "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}"
+      }
     }
   }
 }
@@ -111,13 +169,13 @@ MCP_ENDPOINT=ws://localhost:8889/mcp
    # mcp_server/my_server.py
    import os, sys
    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-   
+
    from mcp.server.fastmcp import FastMCP
    from tools.my_tools import my_tool
-   
+
    mcp = FastMCP("MyServer")
    mcp.tool()(my_tool)
-   
+
    if __name__ == "__main__":
        mcp.run(transport="stdio")
    ```
@@ -134,7 +192,7 @@ MCP_ENDPOINT=ws://localhost:8889/mcp
 ## Project Structure
 
 ```
-├── src/mcp_xiaozhi/          # Core bridge package
+├── src/mcp_xiaozhi/          # Core WebSocket-stdio bridge package
 │   ├── __init__.py
 │   ├── main.py               # Entry point
 │   ├── config.py             # Configuration
@@ -149,9 +207,13 @@ MCP_ENDPOINT=ws://localhost:8889/mcp
 ├── mcp_server/               # MCP server scripts
 │   ├── calculator_server.py
 │   └── search_server.py
-├── web/                      # Web interface (unchanged)
+├── web/                      # Web interface and hub
+│   ├── server.py             # WebSocket hub
+│   ├── index.html            # Web UI
+│   └── app.js                # Client-side JavaScript
 ├── pyproject.toml            # Project config & dependencies
 ├── requirements.txt          # Legacy dependencies
 ├── mcp_config.json           # MCP server definitions
-└── mcp_pipe.py               # Entry point wrapper
+├── mcp_pipe.py               # Entry point wrapper
+└── ARCHITECTURE.md           # Architecture documentation
 ```

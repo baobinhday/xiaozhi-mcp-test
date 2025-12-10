@@ -7,15 +7,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mcp.server.fastmcp import FastMCP
-from tools.news_tools import get_latest_news
+from tools.search_tools import web_search
 
 # Create MCP server
-mcp = FastMCP("SearchAndNews")
+mcp = FastMCP("Search")
 
 # Register tools
-mcp.tool()(get_latest_news)
+mcp.tool()(web_search)
 
 # Start the server
 if __name__ == "__main__":
-    print("[MCP Server] Starting SearchAndNews server...")
+    print("[MCP Server] Starting Search server...")
     mcp.run(transport="stdio")
