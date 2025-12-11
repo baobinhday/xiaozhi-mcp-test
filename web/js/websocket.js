@@ -76,6 +76,12 @@ function connect() {
   // Strip /mcp suffix if present - browser connects to hub root, not MCP tool path
   endpoint = endpoint.replace(/\/mcp\/?(\?.*)?$/, '$1');
 
+  // Upgrade protocol if page is loaded via HTTPS
+  if (window.location.protocol === 'https:' && endpoint.startsWith('ws://')) {
+    endpoint = endpoint.replace('ws://', 'wss://');
+    log('info', 'Upgraded WebSocket protocol to WSS (Secure)');
+  }
+
   // If endpoint is localhost, replace with current window hostname
   // This allows connecting to the server when accessing from a different device
   if (endpoint.includes('//localhost') || endpoint.includes('//127.0.0.1')) {
