@@ -34,8 +34,6 @@ docker run -d \
   --name mcp-tester \
   -p 8888:8888 \
   -p 8889:8889 \
-  -e MCP_ENDPOINT=ws://localhost:8889/mcp \
-  -e MCP_SCRIPT=agent_tools.py \
   mcp-web-tester
 ```
 
@@ -52,12 +50,13 @@ docker stop mcp-tester
 docker rm mcp-tester
 ```
 
-## Configuration
-
 ### Environment Variables
 
-- `MCP_ENDPOINT`: WebSocket endpoint (default: `ws://localhost:8889/mcp`)
-- `MCP_SCRIPT`: MCP script to run (default: `agent_tools.py`)
+- `MCP_CONFIG`: Path to MCP config file (default: `/app/mcp_config.json`)
+- `CMS_USERNAME`: CMS admin username (default: `admin`)
+- `CMS_PASSWORD`: CMS admin password (default: `changeme`)
+
+**Note:** Endpoints are configured via the CMS web interface at http://localhost:8890
 
 ### Using a Different MCP Script
 

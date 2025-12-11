@@ -427,19 +427,21 @@ async def main():
     """Main entry point."""
     print(f"""
 ╔══════════════════════════════════════════════════════════════════╗
-║              MCP Web Tester - WebSocket Hub                       ║
+║              MCP Web Tester - WebSocket Hub                      ║
 ╠══════════════════════════════════════════════════════════════════╣
-║                                                                   ║
-║  HTTP Server:       http://localhost:{HTTP_PORT:<5}                      ║
-║  WebSocket Hub:     ws://localhost:{WS_PORT:<5}                        ║
-║                                                                   ║
-║  Usage:                                                           ║
-║    1. Open http://localhost:{HTTP_PORT} in browser                      ║
-║    2. Connect MCP tool using mcp_pipe.py:                         ║
-║       MCP_ENDPOINT=ws://localhost:{WS_PORT}/mcp python3 mcp_pipe.py      ║
-║    3. Web UI will show "Connected" when tool joins                ║
-║                                                                   ║
-║  Press Ctrl+C to stop.                                            ║
+║                                                                  ║
+║  HTTP Server:       http://localhost:{HTTP_PORT:<5}              ║
+║  WebSocket Hub:     ws://localhost:{WS_PORT:<5}                  ║
+║                                                                  ║
+║  Usage:                                                          ║
+║    1. Open http://localhost:{HTTP_PORT} in browser               ║
+║    2. Add endpoint via CMS at http://localhost:8890              ║
+║    3. Endpoint local: ws://localhost:{WS_PORT}/mcp               ║
+║    4. Endpoint xiaozhi: ws://api.xiaozhi.me/mcp/?token={token}   ║
+║    5. Run MCP tools: python3 mcp_pipe.py                         ║
+║    6. Web UI will show "Connected" when tool joins               ║
+║                                                                  ║
+║  Press Ctrl+C to stop.                                           ║
 ╚══════════════════════════════════════════════════════════════════╝
     """)
     

@@ -34,13 +34,17 @@ pip3 install -r requirements.txt
 
 ## Configuration
 
-Create a `.env` file (copy from `.env.example`):
+### 1. Configure Endpoints via CMS
+
+Start the CMS server and add your WebSocket endpoints:
 
 ```bash
-MCP_ENDPOINT=ws://localhost:8889/mcp
+cd web-cms && python3 server.py
+# Open http://localhost:8890 and login (default: admin/changeme)
+# Add endpoint: ws://localhost:8889/mcp
 ```
 
-Configure your MCP servers in `mcp_config.json`:
+### 2. Configure MCP Servers
 
 ```json
 {
@@ -68,8 +72,6 @@ python3 server.py
 ### Terminal 2: Connect MCP Tools
 
 ```bash
-export MCP_ENDPOINT=ws://localhost:8889/mcp
-
 # Run all servers from mcp_config.json
 python3 mcp_pipe.py
 

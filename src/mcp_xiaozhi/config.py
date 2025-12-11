@@ -3,7 +3,7 @@
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from dotenv import load_dotenv
 
@@ -18,13 +18,21 @@ INITIAL_BACKOFF = 1  # Initial wait time in seconds
 MAX_BACKOFF = 600  # Maximum wait time in seconds
 
 
-def get_endpoint_url() -> Optional[str]:
-    """Get MCP endpoint URL from environment.
-
+def get_all_endpoint_urls() -> list[dict]:
+    """Get all enabled MCP endpoint URLs from database.
+    
     Returns:
-        The endpoint URL or None if not set
+        List of endpoint dictionaries with 'name' and 'url' keys.
     """
-    return os.environ.get("MCP_ENDPOINT")
+    from .database import get_enabled_endpoints, init_db
+    
+    # Initialize database if needed
+    init_db()
+    
+    # Get endpoints from database
+    endpoints = get_enabled_endpoints()
+    
+    return [{"name": ep["name"], "url": ep["url"]} for ep in endpoints]
 
 
 def load_config() -> Dict[str, Any]:

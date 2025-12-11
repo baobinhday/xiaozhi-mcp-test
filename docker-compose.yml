@@ -14,9 +14,6 @@ services:
       - path: ./.env
         required: false
     environment:
-      # These will override values from .env file
-      # MCP endpoint URL for WebSocket connection
-      - MCP_ENDPOINT=${MCP_ENDPOINT:-ws://localhost:8889/mcp}
       # Path to MCP config file inside container
       - MCP_CONFIG=${MCP_CONFIG:-/app/mcp_config.json}
     # If you need to persist any data

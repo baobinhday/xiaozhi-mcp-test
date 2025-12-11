@@ -44,8 +44,7 @@ COPY . .
 EXPOSE 8888 8889
 
 # Runtime environment variables (can be overridden with -e or docker-compose)
-ENV MCP_ENDPOINT=ws://localhost:8889/mcp \
-    MCP_CONFIG=/app/mcp_config.json
+ENV MCP_CONFIG=/app/mcp_config.json
 
 # Create a startup script to run both services
 RUN echo '#!/bin/bash\n\

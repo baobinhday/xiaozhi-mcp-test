@@ -25,8 +25,8 @@ The system consists of three main components:
 └─────────────┘                     └─────────────┘                  └─────────────┘
 ```
 
-1. `mcp_pipe.py` reads `MCP_ENDPOINT` and `mcp_config.json`
-2. Connects to WebSocket endpoint for each enabled server
+1. `mcp_pipe.py` reads endpoints from SQLite database and `mcp_config.json`
+2. Connects to WebSocket endpoints for each enabled server
 3. Spawns MCP server subprocess (e.g., `calculator_server.py`)
 4. Pipes WebSocket messages to subprocess stdin
 5. Pipes subprocess stdout back to WebSocket
@@ -84,7 +84,6 @@ cd web
 python3 server.py
 
 # Terminal 2: MCP Tools
-export MCP_ENDPOINT=ws://localhost:8889/mcp
 python3 mcp_pipe.py
 ```
 
@@ -94,7 +93,6 @@ python3 mcp_pipe.py
 python3 mcp_pipe.py mcp_server/calculator_server.py
 
 # Using the installed command
-export MCP_ENDPOINT=ws://localhost:8889/mcp
 mcp-pipe
 
 # Run with specific server
@@ -117,12 +115,16 @@ pytest
 ruff format src/ tools/ mcp_server/
 ```
 
-## Configuration
+### Endpoint Configuration
 
-### Environment Variables (`.env`)
+Endpoints are configured via the CMS at http://localhost:8890:
+
 ```bash
-MCP_ENDPOINT=ws://localhost:8889/mcp
+# Start the CMS server
+cd web-cms && python3 server.py
 ```
+
+Default credentials: `admin` / `changeme` (configure via `CMS_USERNAME`, `CMS_PASSWORD` in `.env`)
 
 ### Server Config (`mcp_config.json`)
 ```json

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Endpoints CMS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="app-container">
+    <!-- Login View -->
+    <div id="login-view" class="view">
+      <div class="login-card">
+        <div class="login-header">
+          <h1>🔌 MCP Endpoints</h1>
+          <p>Admin Panel</p>
+        </div>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+          <p id="login-error" class="error-message"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dashboard View -->
+    <div id="dashboard-view" class="view hidden">
+      <header class="dashboard-header">
+        <h1>🔌 MCP Endpoints</h1>
+        <div class="header-actions">
+          <button id="backup-btn" class="btn btn-success" title="Download database backup">
+            <span class="icon">⬇</span> Backup
+          </button>
+          <button id="restore-btn" class="btn btn-warning" title="Restore from backup file">
+            <span class="icon">⬆</span> Restore
+          </button>
+          <input type="file" id="restore-file-input" accept=".json" style="display: none;">
+          <button id="add-endpoint-btn" class="btn btn-primary">
+            <span class="icon">+</span> Add Endpoint
+          </button>
+          <button id="logout-btn" class="btn btn-secondary">Logout</button>
+        </div>
+      </header>
+
+      <main class="dashboard-content">
+        <div class="stats-bar">
+          <div class="stat-item">
+            <span class="stat-value" id="total-count">0</span>
+            <span class="stat-label">Total</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="enabled-count">0</span>
+            <span class="stat-label">Enabled</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="disabled-count">0</span>
+            <span class="stat-label">Disabled</span>
+          </div>
+        </div>
+
+        <div id="endpoints-container">
+          <div id="endpoints-list" class="endpoints-grid"></div>
+          <div id="empty-state" class="empty-state hidden">
+            <p>No endpoints configured</p>
+            <p class="text-muted">Click "Add Endpoint" to get started</p>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="modal-title">Add Endpoint</h2>
+          <button id="modal-close" class="btn-icon">&times;</button>
+        </div>
+        <form id="endpoint-form">
+          <input type="hidden" id="endpoint-id">
+          <div class="form-group">
+            <label for="endpoint-name">Name</label>
+            <input type="text" id="endpoint-name" name="name" required placeholder="e.g., Production Server">
+          </div>
+          <div class="form-group">
+            <label for="endpoint-url">WebSocket URL</label>
+            <input type="url" id="endpoint-url" name="url" required placeholder="ws://localhost:8889/mcp">
+          </div>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="endpoint-enabled" name="enabled" checked>
+              <span class="checkbox-text">Enabled</span>
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="modal-cancel" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal-overlay" class="modal-overlay hidden">
+      <div class="modal modal-small">
+        <div class="modal-header">
+          <h2>Delete Endpoint</h2>
+          <button class="btn-icon delete-modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete "<span id="delete-endpoint-name"></span>"?</p>
+          <p class="text-muted">This action cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary delete-modal-close">Cancel</button>
+          <button type="button" id="confirm-delete-btn" class="btn btn-danger">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let endpoints = [];
+    let deleteTargetId = null;
+
+    // DOM Elements
+    const loginView = document.getElementById('login-view');
+    const dashboardView = document.getElementById('dashboard-view');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const logoutBtn = document.getElementById('logout-btn');
+    const addEndpointBtn = document.getElementById('add-endpoint-btn');
+    const endpointsList = document.getElementById('endpoints-list');
+    const emptyState = document.getElementById('empty-state');
+    const modalOverlay = document.getElementById('modal-overlay');
+    const modalTitle = document.getElementById('modal-title');
+    const modalClose = document.getElementById('modal-close');
+    const modalCancel = document.getElementById('modal-cancel');
+    const endpointForm = document.getElementById('endpoint-form');
+    const deleteModalOverlay = document.getElementById('delete-modal-overlay');
+    const deleteEndpointName = document.getElementById('delete-endpoint-name');
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    const backupBtn = document.getElementById('backup-btn');
+    const restoreBtn = document.getElementById('restore-btn');
+    const restoreFileInput = document.getElementById('restore-file-input');
+
+    // API Functions
+    async function apiRequest(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers
+        }
+      });
+      return response;
+    }
+
+    async function checkAuth() {
+      const response = await apiRequest('/api/auth/check');
+      const data = await response.json();
+      return data.authenticated;
+    }
+
+    async function login(username, password) {
+      const response = await apiRequest('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      });
+      return response.ok;
+    }
+
+    async function logout() {
+      await apiRequest('/api/logout', { method: 'POST' });
+    }
+
+    async function fetchEndpoints() {
+      const response = await apiRequest('/api/endpoints');
+      if (response.ok) {
+        const data = await response.json();
+        endpoints = data.endpoints;
+        renderEndpoints();
+        updateStats();
+      }
+    }
+
+    async function createEndpoint(name, url, enabled) {
+      const response = await apiRequest('/api/endpoints', {
+        method: 'POST',
+        body: JSON.stringify({ name, url, enabled })
+      });
+      return response.ok;
+    }
+
+    async function updateEndpoint(id, data) {
+      const response = await apiRequest(`/api/endpoints/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+      return response.ok;
+    }
+
+    async function deleteEndpoint(id) {
+      const response = await apiRequest(`/api/endpoints/${id}`, {
+        method: 'DELETE'
+      });
+      return response.ok;
+    }
+
+    // UI Functions
+    function showView(view) {
+      loginView.classList.add('hidden');
+      dashboardView.classList.add('hidden');
+      view.classList.remove('hidden');
+    }
+
+    function showModal(title = 'Add Endpoint', endpoint = null) {
+      modalTitle.textContent = title;
+      document.getElementById('endpoint-id').value = endpoint?.id || '';
+      document.getElementById('endpoint-name').value = endpoint?.name || '';
+      document.getElementById('endpoint-url').value = endpoint?.url || '';
+      document.getElementById('endpoint-enabled').checked = endpoint?.enabled !== 0;
+      modalOverlay.classList.remove('hidden');
+    }
+
+    function hideModal() {
+      modalOverlay.classList.add('hidden');
+      endpointForm.reset();
+    }
+
+    function showDeleteModal(id, name) {
+      deleteTargetId = id;
+      deleteEndpointName.textContent = name;
+      deleteModalOverlay.classList.remove('hidden');
+    }
+
+    function hideDeleteModal() {
+      deleteModalOverlay.classList.add('hidden');
+      deleteTargetId = null;
+    }
+
+    function updateStats() {
+      const total = endpoints.length;
+      const enabled = endpoints.filter(e => e.enabled === 1).length;
+      const disabled = total - enabled;
+
+      document.getElementById('total-count').textContent = total;
+      document.getElementById('enabled-count').textContent = enabled;
+      document.getElementById('disabled-count').textContent = disabled;
+    }
+
+    function renderEndpoints() {
+      if (endpoints.length === 0) {
+        endpointsList.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      endpointsList.classList.remove('hidden');
+      emptyState.classList.add('hidden');
+
+      endpointsList.innerHTML = endpoints.map(endpoint => `
+                <div class="endpoint-card ${endpoint.enabled ? '' : 'disabled'}">
+                    <div class="endpoint-status">
+                        <span class="status-dot ${endpoint.enabled ? 'active' : 'inactive'}"></span>
+                    </div>
+                    <div class="endpoint-info">
+                        <h3 class="endpoint-name">${escapeHtml(endpoint.name)}</h3>
+                        <p class="endpoint-url">${escapeHtml(endpoint.url)}</p>
+                        <p class="endpoint-meta">
+                            Created: ${formatDate(endpoint.created_at)}
+                        </p>
+                    </div>
+                    <div class="endpoint-actions">
+                        <button class="btn btn-sm btn-toggle" onclick="toggleEndpoint(${endpoint.id}, ${!endpoint.enabled})">
+                            ${endpoint.enabled ? 'Disable' : 'Enable'}
+                        </button>
+                        <button class="btn btn-sm btn-edit" onclick="editEndpoint(${endpoint.id})">Edit</button>
+                        <button class="btn btn-sm btn-delete" onclick="confirmDelete(${endpoint.id}, '${escapeHtml(endpoint.name)}')">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    }
+
+    // Action Handlers
+    async function toggleEndpoint(id, enabled) {
+      if (await updateEndpoint(id, { enabled })) {
+        await fetchEndpoints();
+      }
+    }
+
+    function editEndpoint(id) {
+      const endpoint = endpoints.find(e => e.id === id);
+      if (endpoint) {
+        showModal('Edit Endpoint', endpoint);
+      }
+    }
+
+    function confirmDelete(id, name) {
+      showDeleteModal(id, name);
+    }
+
+    // Event Listeners
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+
+      loginError.textContent = '';
+
+      if (await login(username, password)) {
+        showView(dashboardView);
+        await fetchEndpoints();
+      } else {
+        loginError.textContent = 'Invalid username or password';
+      }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      await logout();
+      showView(loginView);
+    });
+
+    addEndpointBtn.addEventListener('click', () => {
+      showModal('Add Endpoint');
+    });
+
+    modalClose.addEventListener('click', hideModal);
+    modalCancel.addEventListener('click', hideModal);
+
+    endpointForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('endpoint-id').value;
+      const name = document.getElementById('endpoint-name').value;
+      const url = document.getElementById('endpoint-url').value;
+      const enabled = document.getElementById('endpoint-enabled').checked;
+
+      let success;
+      if (id) {
+        success = await updateEndpoint(id, { name, url, enabled });
+      } else {
+        success = await createEndpoint(name, url, enabled);
+      }
+
+      if (success) {
+        hideModal();
+        await fetchEndpoints();
+      }
+    });
+
+    document.querySelectorAll('.delete-modal-close').forEach(btn => {
+      btn.addEventListener('click', hideDeleteModal);
+    });
+
+    confirmDeleteBtn.addEventListener('click', async () => {
+      if (deleteTargetId !== null) {
+        if (await deleteEndpoint(deleteTargetId)) {
+          hideDeleteModal();
+          await fetchEndpoints();
+        }
+      }
+    });
+
+    // Close modals on overlay click
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) hideModal();
+    });
+
+    deleteModalOverlay.addEventListener('click', (e) => {
+      if (e.target === deleteModalOverlay) hideDeleteModal();
+    });
+
+    // Backup and Restore handlers
+    backupBtn.addEventListener('click', async () => {
+      try {
+        const response = await apiRequest('/api/backup');
+        if (response.ok) {
+          const data = await response.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `mcp_endpoints_backup_${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          alert('Failed to create backup');
+        }
+      } catch (error) {
+        alert('Error creating backup: ' + error.message);
+      }
+    });
+
+    restoreBtn.addEventListener('click', () => {
+      restoreFileInput.click();
+    });
+
+    restoreFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (!data.endpoints || !Array.isArray(data.endpoints)) {
+          alert('Invalid backup file format');
+          restoreFileInput.value = '';
+          return;
+        }
+
+        const confirmMsg = `Are you sure you want to restore from backup?\n\nThis will replace all ${endpoints.length} current endpoints with ${data.endpoints.length} endpoints from the backup file.\n\nThis action cannot be undone.`;
+
+        if (!confirm(confirmMsg)) {
+          restoreFileInput.value = '';
+          return;
+        }
+
+        const response = await apiRequest('/api/restore', {
+          method: 'POST',
+          body: JSON.stringify({ endpoints: data.endpoints })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          alert(`Successfully restored ${result.restored} endpoints`);
+          await fetchEndpoints();
+        } else {
+          const error = await response.json();
+          alert('Restore failed: ' + (error.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error restoring backup: ' + error.message);
+      }
+
+      restoreFileInput.value = '';
+    });
+
+    // Initialize
+    async function init() {
+      if (await checkAuth()) {
+        showView(dashboardView);
+        await fetchEndpoints();
+      } else {
+        showView(loginView);
+      }
+    }
+
+    init();
+  </script>
+</body>
+
+</html>

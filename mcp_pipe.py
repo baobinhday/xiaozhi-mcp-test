@@ -10,8 +10,9 @@ Usage:
     python mcp_pipe.py path/to/server.py  # Run a single server script
 
 Environment variables:
-    MCP_ENDPOINT: WebSocket endpoint URL (required)
     MCP_CONFIG: Path to config file (optional, defaults to ./mcp_config.json)
+
+Endpoints are configured via the CMS at http://localhost:8890
 """
 
 import sys
