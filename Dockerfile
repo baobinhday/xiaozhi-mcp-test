@@ -45,7 +45,15 @@ COPY . .
 EXPOSE 8888 8889 8890
 
 # Runtime environment variables (can be overridden with -e or docker-compose)
-ENV MCP_CONFIG=/app/mcp_config.json
+ENV MCP_CONFIG=/app/mcp_config.json \
+    CONTEXT7_API_KEY="" \
+    PERPLEXITY_API_KEY="" \
+    CMS_USERNAME=admin \
+    CMS_PASSWORD=changeme \
+    CMS_SECRET_KEY=your-secret-key-here \
+    WEB_USERNAME=admin \
+    WEB_PASSWORD=admin123 \
+    WEB_SECRET_KEY=your-web-secret-key-here
 
 # Create a startup script to run all services
 RUN echo '#!/bin/bash\n\

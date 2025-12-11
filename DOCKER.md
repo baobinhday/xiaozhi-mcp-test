@@ -38,6 +38,7 @@ docker run -d \
   -p 8889:8889 \
   -p 8890:8890 \
   -v $(pwd)/data:/app/data \
+  --env-file .env \
   mcp-web-tester
 ```
 
@@ -57,8 +58,14 @@ docker rm mcp-tester
 ### Environment Variables
 
 - `MCP_CONFIG`: Path to MCP config file (default: `/app/mcp_config.json`)
+- `CONTEXT7_API_KEY`: API Key for Context7 (required if using Context7 tool)
+- `PERPLEXITY_API_KEY`: API Key for Perplexity (required if using Perplexity tool)
 - `CMS_USERNAME`: CMS admin username (default: `admin`)
 - `CMS_PASSWORD`: CMS admin password (default: `changeme`)
+- `CMS_SECRET_KEY`: CMS session secret key (default: `your-secret-key-here`)
+- `WEB_USERNAME`: Web UI auth username (default: `admin`)
+- `WEB_PASSWORD`: Web UI auth password (default: `admin123`)
+- `WEB_SECRET_KEY`: Web UI session secret key (default: `your-web-secret-key-here`)
 
 **Note:** Endpoints are configured via the CMS web interface at http://localhost:8890
 
