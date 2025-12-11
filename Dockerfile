@@ -62,6 +62,13 @@ ENV MCP_CONFIG=/app/data/mcp_config.json \
 RUN echo '#!/bin/bash\n\
     set -e\n\
     \n\
+    # Ensure data directory exists and has config file\n\
+    mkdir -p /app/data\n\
+    if [ ! -f /app/data/mcp_config.json ]; then\n\
+    echo "Creating mcp_config.json from example..."\n\
+    cp /app/mcp_config.example.json /app/data/mcp_config.json\n\
+    fi\n\
+    \n\
     # Start the web server in the background\n\
     echo "Starting Web Server on port 8888..."\n\
     cd /app/web && python3 server.py &\n\
