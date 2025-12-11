@@ -275,7 +275,15 @@
                     </div>
                     <div class="endpoint-info">
                         <h3 class="endpoint-name">${escapeHtml(endpoint.name)}</h3>
-                        <p class="endpoint-url">${escapeHtml(endpoint.url)}</p>
+                        <div class="endpoint-url-container" style="display: flex; align-items: center; gap: 8px;">
+                            <p class="endpoint-url" title="${escapeHtml(endpoint.url)}">${escapeHtml(maskUrl(endpoint.url))}</p>
+                            <button class="btn-icon" onclick="copyEndpointUrl(${endpoint.id}, this)" title="Copy full URL" style="font-size: 1rem; padding: 4px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
                         <p class="endpoint-meta">
                             Created: ${formatDate(endpoint.created_at)}
                         </p>
@@ -289,6 +297,32 @@
                     </div>
                 </div>
             `).join('');
+    }
+
+    function maskUrl(url) {
+      if (!url) return '';
+      if (url.length <= 40) return url;
+      return url.substring(0, 25) + '...' + url.substring(url.length - 10);
+    }
+
+    async function copyEndpointUrl(id, btnElement) {
+      const endpoint = endpoints.find(e => e.id === id);
+      if (endpoint && endpoint.url) {
+        try {
+          await navigator.clipboard.writeText(endpoint.url);
+          const originalHtml = btnElement.innerHTML;
+          btnElement.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          `;
+          setTimeout(() => {
+            btnElement.innerHTML = originalHtml;
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy', err);
+        }
+      }
     }
 
     function escapeHtml(text) {
