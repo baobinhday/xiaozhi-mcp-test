@@ -11,7 +11,12 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nodejs \
     npm \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install uv (includes uvx)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
