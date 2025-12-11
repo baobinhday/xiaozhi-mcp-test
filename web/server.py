@@ -15,10 +15,16 @@ MCP tools connect to provide tool execution.
 import asyncio
 import json
 import logging
+import os
+import secrets
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler
 import socketserver
+from urllib.parse import urlparse
+
+from dotenv import load_dotenv
 
 try:
     import websockets
@@ -29,6 +35,9 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets"])
     import websockets
     from websockets.server import serve as ws_serve
+
+# Load environment variables
+load_dotenv(override=False)
 
 # Configure logging
 logging.basicConfig(
@@ -41,6 +50,52 @@ logger = logging.getLogger('MCP_HUB')
 HTTP_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8888
 WS_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8889
 WEB_DIR = Path(__file__).parent.absolute()
+
+# Authentication settings
+WEB_USERNAME = os.environ.get("WEB_USERNAME", "admin")
+WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin1asdasdfsdafdsg$####43dgsdg23")
+WEB_SECRET_KEY = os.environ.get("WEB_SECRET_KEY", secrets.token_hex(32))
+SESSION_DURATION_HOURS = 24
+
+# In-memory session storage
+sessions = {}
+
+
+def generate_session_token() -> str:
+    """Generate a secure session token."""
+    return secrets.token_urlsafe(32)
+
+
+def create_session(username: str) -> str:
+    """Create a new session for a user."""
+    token = generate_session_token()
+    sessions[token] = {
+        "username": username,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=SESSION_DURATION_HOURS)
+    }
+    return token
+
+
+def validate_session(token: str) -> bool:
+    """Validate a session token."""
+    if not token or token not in sessions:
+        return False
+    
+    session = sessions[token]
+    if datetime.now(timezone.utc) > session["expires_at"]:
+        del sessions[token]
+        return False
+    
+    return True
+
+
+def destroy_session(token: str) -> bool:
+    """Destroy a session."""
+    if token in sessions:
+        del sessions[token]
+        return True
+    return False
 
 
 class WebSocketHub:
@@ -399,26 +454,142 @@ async def run_websocket_server():
 
 
 def run_http_server():
-    """Run HTTP server for static files (blocking)."""
-    class QuietHandler(SimpleHTTPRequestHandler):
+    """Run HTTP server for static files with authentication (blocking)."""
+    
+    class AuthHandler(SimpleHTTPRequestHandler):
+        """HTTP handler with session-based authentication."""
+        
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(WEB_DIR), **kwargs)
-            
+        
         def log_message(self, format, *args):
             # Skip logging certain requests or handle errors
             if args and isinstance(args[0], str):
                 if "GET / " in args[0] or "GET /style" in args[0] or "GET /app" in args[0]:
                     logger.info(f"[HTTP] {args[0]}")
-            
+        
         def end_headers(self):
             self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.send_header('Cache-Control', 'no-store')
             super().end_headers()
+        
+        def send_json_response(self, data: dict, status: int = 200):
+            """Send a JSON response."""
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode())
+        
+        def get_session_token(self) -> str:
+            """Extract session token from cookies."""
+            cookie_header = self.headers.get("Cookie", "")
+            for cookie in cookie_header.split(";"):
+                cookie = cookie.strip()
+                if cookie.startswith("web_session="):
+                    return cookie[12:]
+            return ""
+        
+        def is_authenticated(self) -> bool:
+            """Check if the request is authenticated."""
+            token = self.get_session_token()
+            return validate_session(token)
+        
+        def read_body(self) -> dict:
+            """Read and parse JSON body."""
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length == 0:
+                return {}
+            body = self.rfile.read(content_length)
+            return json.loads(body.decode())
+        
+        def do_OPTIONS(self):
+            """Handle CORS preflight requests."""
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
+        
+        def do_GET(self):
+            """Handle GET requests."""
+            parsed = urlparse(self.path)
+            path = parsed.path
+            
+            # API routes (no auth required)
+            if path == "/api/auth/check":
+                is_auth = self.is_authenticated()
+                self.send_json_response({"authenticated": is_auth})
+                return
+            
+            # Protected static files - redirect to login if not authenticated
+            # Allow CSS, JS, and fonts without auth for login page styling
+            allowed_without_auth = [
+                '/style.css', '/common.css', '/app.js', 
+                '/js/', '/login.html'
+            ]
+            
+            needs_auth = True
+            for allowed in allowed_without_auth:
+                if path.startswith(allowed) or path == allowed:
+                    needs_auth = False
+                    break
+            
+            if needs_auth and not self.is_authenticated():
+                # For root path, still serve index.html (it will show login)
+                if path == "/" or path == "":
+                    self.path = "/index.html"
+                    super().do_GET()
+                    return
+                # For other paths, return 401
+                self.send_json_response({"error": "Unauthorized"}, 401)
+                return
+            
+            # Serve static files
+            if path == "/" or path == "":
+                self.path = "/index.html"
+            super().do_GET()
+        
+        def do_POST(self):
+            """Handle POST requests."""
+            parsed = urlparse(self.path)
+            path = parsed.path
+            
+            if path == "/api/login":
+                body = self.read_body()
+                username = body.get("username", "")
+                password = body.get("password", "")
+                
+                if username == WEB_USERNAME and password == WEB_PASSWORD:
+                    token = create_session(username)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Set-Cookie", f"web_session={token}; Path=/; HttpOnly; Max-Age={SESSION_DURATION_HOURS * 3600}")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True, "message": "Login successful"}).encode())
+                else:
+                    self.send_json_response({"error": "Invalid credentials"}, 401)
+            
+            elif path == "/api/logout":
+                token = self.get_session_token()
+                destroy_session(token)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Set-Cookie", "web_session=; Path=/; HttpOnly; Max-Age=0")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True}).encode())
+            
+            else:
+                self.send_json_response({"error": "Not found"}, 404)
     
     class ThreadedServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         allow_reuse_address = True
         
-    server = ThreadedServer(("0.0.0.0", HTTP_PORT), QuietHandler)
+    server = ThreadedServer(("0.0.0.0", HTTP_PORT), AuthHandler)
     logger.info(f"HTTP server running on http://localhost:{HTTP_PORT}")
     server.serve_forever()
 
@@ -433,11 +604,17 @@ async def main():
 ║  HTTP Server:       http://localhost:{HTTP_PORT:<5}              ║
 ║  WebSocket Hub:     ws://localhost:{WS_PORT:<5}                  ║
 ║                                                                  ║
+║  Authentication:                                                 ║
+║    Username: {WEB_USERNAME:<20}                             ║
+║    Password: {'*' * min(len(WEB_PASSWORD), 10):<20}                             ║
+║                                                                  ║
+║  Set WEB_USERNAME, WEB_PASSWORD in .env to change                ║
+║                                                                  ║
 ║  Usage:                                                          ║
 ║    1. Open http://localhost:{HTTP_PORT} in browser               ║
-║    2. Add endpoint via CMS at http://localhost:8890              ║
-║    3. Endpoint local: ws://localhost:{WS_PORT}/mcp               ║
-║    4. Endpoint xiaozhi: ws://api.xiaozhi.me/mcp/?token={token}   ║
+║    2. Login with credentials above                               ║
+║    3. Add endpoint via CMS at http://localhost:8890              ║
+║    4. Endpoint local: ws://localhost:{WS_PORT}/mcp               ║
 ║    5. Run MCP tools: python3 mcp_pipe.py                         ║
 ║    6. Web UI will show "Connected" when tool joins               ║
 ║                                                                  ║

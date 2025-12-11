@@ -17,7 +17,9 @@ docker compose logs -f
 docker compose down
 ```
 
-Then open http://localhost:8888 in your browser.
+Then open:
+- **Web UI**: http://localhost:8888
+- **CMS Admin**: http://localhost:8890
 
 ## Manual Docker Commands
 
@@ -34,6 +36,8 @@ docker run -d \
   --name mcp-tester \
   -p 8888:8888 \
   -p 8889:8889 \
+  -p 8890:8890 \
+  -v $(pwd)/data:/app/data \
   mcp-web-tester
 ```
 
@@ -81,6 +85,7 @@ environment:
 
 - **8888**: Web UI
 - **8889**: WebSocket Hub
+- **8890**: CMS Admin Panel
 
 ## Health Check
 
@@ -121,8 +126,8 @@ For development, you might want to mount your local code:
 docker run -d \
   -p 8888:8888 \
   -p 8889:8889 \
+  -p 8890:8890 \
   -v $(pwd):/app \
-  -e MCP_SCRIPT=agent_tools.py \
   mcp-web-tester
 ```
 
