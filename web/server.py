@@ -524,6 +524,23 @@ def run_http_server():
                 self.send_json_response({"authenticated": is_auth})
                 return
             
+            # API route to get endpoints (requires auth)
+            if path == "/api/endpoints":
+                if not self.is_authenticated():
+                    self.send_json_response({"error": "Unauthorized"}, 401)
+                    return
+                try:
+                    # Import database module
+                    sys.path.insert(0, str(Path(__file__).parent.parent))
+                    from src.mcp_xiaozhi.database import get_enabled_endpoints, init_db
+                    init_db()
+                    endpoints = get_enabled_endpoints()
+                    self.send_json_response({"endpoints": endpoints})
+                except Exception as e:
+                    logger.error(f"Failed to fetch endpoints: {e}")
+                    self.send_json_response({"error": str(e)}, 500)
+                return
+            
             # Protected static files - redirect to login if not authenticated
             # Allow CSS, JS, and fonts without auth for login page styling
             allowed_without_auth = [

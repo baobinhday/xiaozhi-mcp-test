@@ -87,13 +87,14 @@
 
                 <div class="connection-panel flex items-center gap-4 flex-wrap w-full lg:w-auto flex-col sm:flex-row">
                     <div class="connection-input-group flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
-                        <input type="text" id="ws-endpoint" placeholder="WebSocket Endpoint (ws://...)"
-                            value="ws://localhost:8889"
-                            class="input w-full sm:w-80 px-4 py-2.5 bg-[#1c1c26] border border-white/10 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-indigo-500/50 focus:shadow-[0_0_20px_rgba(99,102,241,0.2)] transition-all placeholder:text-zinc-600">
-                        <button id="connect-btn"
-                            class="btn btn-primary inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-lg font-medium text-sm hover:shadow-lg hover:shadow-indigo-500/20 hover:-translate-y-px transition-all border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                            <span class="btn-icon">⚡</span>
-                            Connect
+                        <select id="ws-endpoint"
+                            class="input w-full sm:w-80 px-4 py-2.5 bg-[#1c1c26] border border-white/10 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-indigo-500/50 focus:shadow-[0_0_20px_rgba(99,102,241,0.2)] transition-all cursor-pointer">
+                            <option value="">Select an endpoint...</option>
+                        </select>
+                        <button id="refresh-endpoints-btn"
+                            class="btn inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1c1c26] text-zinc-400 border border-white/10 rounded-lg font-medium text-sm hover:bg-[#272732] hover:text-zinc-200 transition-all cursor-pointer"
+                            title="Refresh endpoints">
+                            🔄
                         </button>
                     </div>
                     <div class="connection-status flex items-center gap-2 px-4 py-2.5 bg-[#1c1c26] rounded-lg text-sm"
