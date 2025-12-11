@@ -458,6 +458,9 @@
             isAuthenticated = await checkAuth();
             if (isAuthenticated) {
                 showDashboardView();
+                if (typeof initApp === 'function') {
+                    initApp();
+                }
             } else {
                 showLoginView();
             }

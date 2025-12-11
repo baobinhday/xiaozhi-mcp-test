@@ -6,14 +6,17 @@
 // ============================================
 // Application Initialization
 // ============================================
-document.addEventListener('DOMContentLoaded', () => {
+// ============================================
+// Application Initialization
+// ============================================
+window.initApp = function () {
   initConnectionHandler();
   initTabHandler();
   initChatHandler();
   showNoToolsMessage();
   fetchVoices(); // Load TTS voices from API
   log('info', 'Application initialized');
-});
+};
 
 // ============================================
 // Keyboard Shortcuts

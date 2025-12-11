@@ -68,8 +68,8 @@ function renderToolsList(tools) {
     <button class="tool-btn w-full flex flex-row items-start gap-2 p-3 rounded-lg hover:bg-[#1c1c26] transition-all text-left group ${index === 0 ? 'active' : ''}" data-tool-index="${index}">
       <span class="tool-icon text-2xl mb-1">${getToolIcon(tool.name)}</span>
       <div class="flex flex-col gap-1">
-        <span class="tool-name font-medium text-sm text-zinc-200 group-hover:text-indigo-400 transition-colors">${formatToolName(tool.name)}</span>
-        <span class="tool-desc font-mono text-[10px] text-zinc-500 truncate w-full">${tool.name}</span>
+        <span class="tool-name whitespace-pre-wrap break-all font-medium text-sm text-zinc-200 group-hover:text-indigo-400 transition-colors">${formatToolName(tool.name)}</span>
+        <span class="tool-desc whitespace-pre-wrap break-all font-mono text-[10px] text-zinc-500 truncate w-full">${tool.name}</span>
       </div>
     </button>
   `).join('');
