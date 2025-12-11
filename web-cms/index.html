@@ -52,26 +52,61 @@
       </header>
 
       <main class="dashboard-content">
-        <div class="stats-bar">
-          <div class="stat-item">
-            <span class="stat-value" id="total-count">0</span>
-            <span class="stat-label">Total</span>
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+          <button class="tab-btn active" data-tab="endpoints">📡 Endpoints</button>
+          <button class="tab-btn" data-tab="mcp-servers">⚙️ MCP Servers</button>
+        </div>
+
+        <!-- Endpoints Tab -->
+        <div id="endpoints-tab" class="tab-content active">
+          <div class="stats-bar">
+            <div class="stat-item">
+              <span class="stat-value" id="total-count">0</span>
+              <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="enabled-count">0</span>
+              <span class="stat-label">Enabled</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="disabled-count">0</span>
+              <span class="stat-label">Disabled</span>
+            </div>
           </div>
-          <div class="stat-item">
-            <span class="stat-value" id="enabled-count">0</span>
-            <span class="stat-label">Enabled</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value" id="disabled-count">0</span>
-            <span class="stat-label">Disabled</span>
+
+          <div id="endpoints-container">
+            <div id="endpoints-list" class="endpoints-grid"></div>
+            <div id="empty-state" class="empty-state hidden">
+              <p>No endpoints configured</p>
+              <p class="text-muted">Click "Add Endpoint" to get started</p>
+            </div>
           </div>
         </div>
 
-        <div id="endpoints-container">
-          <div id="endpoints-list" class="endpoints-grid"></div>
-          <div id="empty-state" class="empty-state hidden">
-            <p>No endpoints configured</p>
-            <p class="text-muted">Click "Add Endpoint" to get started</p>
+        <!-- MCP Servers Tab -->
+        <div id="mcp-servers-tab" class="tab-content hidden">
+          <div class="stats-bar">
+            <div class="stat-item">
+              <span class="stat-value" id="mcp-total-count">0</span>
+              <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="mcp-enabled-count">0</span>
+              <span class="stat-label">Enabled</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="mcp-disabled-count">0</span>
+              <span class="stat-label">Disabled</span>
+            </div>
+          </div>
+
+          <div id="mcp-servers-container">
+            <div id="mcp-servers-list" class="endpoints-grid"></div>
+            <div id="mcp-empty-state" class="empty-state hidden">
+              <p>No MCP servers configured</p>
+              <p class="text-muted">Click "Add Server" to get started</p>
+            </div>
           </div>
         </div>
       </main>
@@ -125,12 +160,79 @@
         </div>
       </div>
     </div>
+
+    <!-- MCP Server Modal -->
+    <div id="mcp-modal-overlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="mcp-modal-title">Add MCP Server</h2>
+          <button id="mcp-modal-close" class="btn-icon">&times;</button>
+        </div>
+        <form id="mcp-server-form">
+          <input type="hidden" id="mcp-server-original-name">
+          <div class="form-group">
+            <label for="mcp-server-name">Server Name</label>
+            <input type="text" id="mcp-server-name" name="name" required placeholder="e.g., my-calculator">
+          </div>
+          <div class="form-group">
+            <label for="mcp-server-type">Type</label>
+            <select id="mcp-server-type" name="type" class="form-select">
+              <option value="stdio">stdio</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="mcp-server-command">Command</label>
+            <input type="text" id="mcp-server-command" name="command" required placeholder="e.g., python, npx">
+          </div>
+          <div class="form-group">
+            <label for="mcp-server-args">Arguments (one per line)</label>
+            <textarea id="mcp-server-args" name="args" rows="3"
+              placeholder="e.g., mcp_server/calculator_server.py"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="mcp-server-env">Environment Variables (KEY=VALUE, one per line)</label>
+            <textarea id="mcp-server-env" name="env" rows="2" placeholder="e.g., API_KEY=${API_KEY}"></textarea>
+          </div>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="mcp-server-enabled" name="enabled" checked>
+              <span class="checkbox-text">Enabled</span>
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="mcp-modal-cancel" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MCP Server Delete Confirmation Modal -->
+    <div id="mcp-delete-modal-overlay" class="modal-overlay hidden">
+      <div class="modal modal-small">
+        <div class="modal-header">
+          <h2>Delete MCP Server</h2>
+          <button class="btn-icon mcp-delete-modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete "<span id="delete-mcp-server-name"></span>"?</p>
+          <p class="text-muted">This action cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary mcp-delete-modal-close">Cancel</button>
+          <button type="button" id="confirm-mcp-delete-btn" class="btn btn-danger">Delete</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
     // State
     let endpoints = [];
     let deleteTargetId = null;
+    let mcpServers = [];
+    let deleteMcpServerName = null;
+    let currentTab = 'endpoints';
 
     // DOM Elements
     const loginView = document.getElementById('login-view');
@@ -152,6 +254,18 @@
     const backupBtn = document.getElementById('backup-btn');
     const restoreBtn = document.getElementById('restore-btn');
     const restoreFileInput = document.getElementById('restore-file-input');
+
+    // MCP Server DOM Elements
+    const mcpServersList = document.getElementById('mcp-servers-list');
+    const mcpEmptyState = document.getElementById('mcp-empty-state');
+    const mcpModalOverlay = document.getElementById('mcp-modal-overlay');
+    const mcpModalTitle = document.getElementById('mcp-modal-title');
+    const mcpModalClose = document.getElementById('mcp-modal-close');
+    const mcpModalCancel = document.getElementById('mcp-modal-cancel');
+    const mcpServerForm = document.getElementById('mcp-server-form');
+    const mcpDeleteModalOverlay = document.getElementById('mcp-delete-modal-overlay');
+    const deleteMcpServerNameEl = document.getElementById('delete-mcp-server-name');
+    const confirmMcpDeleteBtn = document.getElementById('confirm-mcp-delete-btn');
 
     // API Functions
     async function apiRequest(path, options = {}) {
@@ -211,6 +325,40 @@
 
     async function deleteEndpoint(id) {
       const response = await apiRequest(`/api/endpoints/${id}`, {
+        method: 'DELETE'
+      });
+      return response.ok;
+    }
+
+    // MCP Server API Functions
+    async function fetchMcpServers() {
+      const response = await apiRequest('/api/mcp-servers');
+      if (response.ok) {
+        const data = await response.json();
+        mcpServers = data.servers;
+        renderMcpServers();
+        updateMcpStats();
+      }
+    }
+
+    async function createMcpServer(serverData) {
+      const response = await apiRequest('/api/mcp-servers', {
+        method: 'POST',
+        body: JSON.stringify(serverData)
+      });
+      return response.ok;
+    }
+
+    async function updateMcpServer(name, data) {
+      const response = await apiRequest(`/api/mcp-servers/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+      return response.ok;
+    }
+
+    async function deleteMcpServerApi(name) {
+      const response = await apiRequest(`/api/mcp-servers/${encodeURIComponent(name)}`, {
         method: 'DELETE'
       });
       return response.ok;
@@ -337,6 +485,125 @@
       return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     }
 
+    // Tab Switching
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+      });
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+      });
+      document.getElementById(`${tab}-tab`).classList.remove('hidden');
+
+      // Update button visibility
+      addEndpointBtn.style.display = tab === 'endpoints' ? '' : 'none';
+
+      // Add MCP server button if on MCP tab
+      let addMcpBtn = document.getElementById('add-mcp-server-btn');
+      if (!addMcpBtn) {
+        addMcpBtn = document.createElement('button');
+        addMcpBtn.id = 'add-mcp-server-btn';
+        addMcpBtn.className = 'btn btn-primary';
+        addMcpBtn.innerHTML = '<span class="icon">+</span> Add Server';
+        addMcpBtn.onclick = () => showMcpServerModal('Add MCP Server');
+        addEndpointBtn.parentNode.insertBefore(addMcpBtn, addEndpointBtn);
+      }
+      addMcpBtn.style.display = tab === 'mcp-servers' ? '' : 'none';
+    }
+
+    // MCP Server UI Functions
+    function updateMcpStats() {
+      const total = mcpServers.length;
+      const enabled = mcpServers.filter(s => !s.disabled).length;
+      const disabled = total - enabled;
+
+      document.getElementById('mcp-total-count').textContent = total;
+      document.getElementById('mcp-enabled-count').textContent = enabled;
+      document.getElementById('mcp-disabled-count').textContent = disabled;
+    }
+
+    function renderMcpServers() {
+      if (mcpServers.length === 0) {
+        mcpServersList.classList.add('hidden');
+        mcpEmptyState.classList.remove('hidden');
+        return;
+      }
+
+      mcpServersList.classList.remove('hidden');
+      mcpEmptyState.classList.add('hidden');
+
+      mcpServersList.innerHTML = mcpServers.map(server => `
+        <div class="endpoint-card ${server.disabled ? 'disabled' : ''}">
+          <div class="endpoint-status">
+            <span class="status-dot ${server.disabled ? 'inactive' : 'active'}"></span>
+          </div>
+          <div class="endpoint-info">
+            <h3 class="endpoint-name">${escapeHtml(server.name)}</h3>
+            <p class="endpoint-url"><strong>${escapeHtml(server.command)}</strong> ${escapeHtml(server.args.join(' '))}</p>
+            <p class="endpoint-meta">Type: ${escapeHtml(server.type)}${server.env ? ' • Has env vars' : ''}</p>
+          </div>
+          <div class="endpoint-actions">
+            <button class="btn btn-sm btn-toggle" onclick="toggleMcpServer('${escapeHtml(server.name)}', ${server.disabled})">
+              ${server.disabled ? 'Enable' : 'Disable'}
+            </button>
+            <button class="btn btn-sm btn-edit" onclick="editMcpServer('${escapeHtml(server.name)}')">Edit</button>
+            <button class="btn btn-sm btn-delete" onclick="confirmMcpDelete('${escapeHtml(server.name)}')">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function showMcpServerModal(title = 'Add MCP Server', server = null) {
+      mcpModalTitle.textContent = title;
+      document.getElementById('mcp-server-original-name').value = server?.name || '';
+      document.getElementById('mcp-server-name').value = server?.name || '';
+      document.getElementById('mcp-server-type').value = server?.type || 'stdio';
+      document.getElementById('mcp-server-command').value = server?.command || '';
+      document.getElementById('mcp-server-args').value = server?.args?.join('\n') || '';
+
+      // Convert env object to KEY=VALUE format
+      const envStr = server?.env ? Object.entries(server.env).map(([k, v]) => `${k}=${v}`).join('\n') : '';
+      document.getElementById('mcp-server-env').value = envStr;
+      document.getElementById('mcp-server-enabled').checked = !server?.disabled;
+
+      mcpModalOverlay.classList.remove('hidden');
+    }
+
+    function hideMcpServerModal() {
+      mcpModalOverlay.classList.add('hidden');
+      mcpServerForm.reset();
+    }
+
+    function showMcpDeleteModal(name) {
+      deleteMcpServerName = name;
+      deleteMcpServerNameEl.textContent = name;
+      mcpDeleteModalOverlay.classList.remove('hidden');
+    }
+
+    function hideMcpDeleteModal() {
+      mcpDeleteModalOverlay.classList.add('hidden');
+      deleteMcpServerName = null;
+    }
+
+    // MCP Server Action Handlers
+    async function toggleMcpServer(name, currentlyDisabled) {
+      if (await updateMcpServer(name, { disabled: !currentlyDisabled })) {
+        await fetchMcpServers();
+      }
+    }
+
+    function editMcpServer(name) {
+      const server = mcpServers.find(s => s.name === name);
+      if (server) {
+        showMcpServerModal('Edit MCP Server', server);
+      }
+    }
+
+    function confirmMcpDelete(name) {
+      showMcpDeleteModal(name);
+    }
+
     // Action Handlers
     async function toggleEndpoint(id, enabled) {
       if (await updateEndpoint(id, { enabled })) {
@@ -366,6 +633,7 @@
       if (await login(username, password)) {
         showView(dashboardView);
         await fetchEndpoints();
+        await fetchMcpServers();
       } else {
         loginError.textContent = 'Invalid username or password';
       }
@@ -493,11 +761,89 @@
       restoreFileInput.value = '';
     });
 
+    // Tab event listeners
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    // MCP Server Modal event listeners
+    mcpModalClose.addEventListener('click', hideMcpServerModal);
+    mcpModalCancel.addEventListener('click', hideMcpServerModal);
+
+    mcpServerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const originalName = document.getElementById('mcp-server-original-name').value;
+      const name = document.getElementById('mcp-server-name').value.trim();
+      const type = document.getElementById('mcp-server-type').value;
+      const command = document.getElementById('mcp-server-command').value.trim();
+      const argsText = document.getElementById('mcp-server-args').value;
+      const envText = document.getElementById('mcp-server-env').value;
+      const enabled = document.getElementById('mcp-server-enabled').checked;
+
+      const args = argsText.split('\n').map(a => a.trim()).filter(a => a);
+
+      // Parse env variables
+      const env = {};
+      envText.split('\n').forEach(line => {
+        const eq = line.indexOf('=');
+        if (eq > 0) {
+          env[line.substring(0, eq).trim()] = line.substring(eq + 1).trim();
+        }
+      });
+
+      const serverData = {
+        name,
+        type,
+        command,
+        args,
+        env: Object.keys(env).length > 0 ? env : null,
+        disabled: !enabled
+      };
+
+      let success;
+      if (originalName) {
+        // Update existing
+        success = await updateMcpServer(originalName, serverData);
+      } else {
+        // Create new
+        success = await createMcpServer(serverData);
+      }
+
+      if (success) {
+        hideMcpServerModal();
+        await fetchMcpServers();
+      }
+    });
+
+    // MCP Delete Modal event listeners
+    document.querySelectorAll('.mcp-delete-modal-close').forEach(btn => {
+      btn.addEventListener('click', hideMcpDeleteModal);
+    });
+
+    confirmMcpDeleteBtn.addEventListener('click', async () => {
+      if (deleteMcpServerName !== null) {
+        if (await deleteMcpServerApi(deleteMcpServerName)) {
+          hideMcpDeleteModal();
+          await fetchMcpServers();
+        }
+      }
+    });
+
+    // Close MCP modals on overlay click
+    mcpModalOverlay.addEventListener('click', (e) => {
+      if (e.target === mcpModalOverlay) hideMcpServerModal();
+    });
+
+    mcpDeleteModalOverlay.addEventListener('click', (e) => {
+      if (e.target === mcpDeleteModalOverlay) hideMcpDeleteModal();
+    });
+
     // Initialize
     async function init() {
       if (await checkAuth()) {
         showView(dashboardView);
         await fetchEndpoints();
+        await fetchMcpServers();
       } else {
         showView(loginView);
       }

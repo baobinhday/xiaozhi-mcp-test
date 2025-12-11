@@ -92,7 +92,9 @@ body {
 
 .form-group input[type="text"],
 .form-group input[type="password"],
-.form-group input[type="url"] {
+.form-group input[type="url"],
+.form-group select,
+.form-group textarea {
     width: 100%;
     padding: 0.75rem 1rem;
     background: var(--bg-primary);
@@ -101,9 +103,17 @@ body {
     color: var(--text-primary);
     font-size: 1rem;
     transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
 }
 
-.form-group input:focus {
+.form-group textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
     outline: none;
     border-color: var(--accent-blue);
     box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
@@ -256,6 +266,55 @@ body {
     display: flex;
     gap: 1.5rem;
     margin-bottom: 2rem;
+}
+
+/* Tab Navigation */
+.tab-nav {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius) var(--radius) 0 0;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.tab-btn.active {
+    color: var(--accent-blue);
+    background: var(--bg-secondary);
+    border-bottom: 2px solid var(--accent-blue);
+}
+
+.tab-content {
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.tab-content.hidden {
+    display: none;
 }
 
 .stat-item {

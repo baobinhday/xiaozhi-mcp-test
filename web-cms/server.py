@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 # Add parent directory to path to import database module
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -58,6 +58,31 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 logger = logging.getLogger('CMS')
+
+# MCP Config file path
+MCP_CONFIG_PATH = Path(__file__).parent.parent / "mcp_config.json"
+
+
+def load_mcp_config() -> dict:
+    """Load MCP config from mcp_config.json."""
+    try:
+        if MCP_CONFIG_PATH.exists():
+            with open(MCP_CONFIG_PATH, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading mcp_config.json: {e}")
+    return {"mcpServers": {}}
+
+
+def save_mcp_config(config: dict) -> bool:
+    """Save MCP config to mcp_config.json."""
+    try:
+        with open(MCP_CONFIG_PATH, 'w') as f:
+            json.dump(config, f, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving mcp_config.json: {e}")
+        return False
 
 
 def generate_session_token() -> str:
@@ -197,6 +222,22 @@ class CMSHandler(SimpleHTTPRequestHandler):
             except ValueError:
                 self.send_json_response({"error": "Invalid ID"}, 400)
         
+        elif path == "/api/mcp-servers":
+            if not self.require_auth():
+                return
+            config = load_mcp_config()
+            servers = []
+            for name, server in config.get("mcpServers", {}).items():
+                servers.append({
+                    "name": name,
+                    "type": server.get("type", "stdio"),
+                    "command": server.get("command", ""),
+                    "args": server.get("args", []),
+                    "env": server.get("env", {}),
+                    "disabled": server.get("disabled", False)
+                })
+            self.send_json_response({"servers": servers})
+        
         else:
             # Serve static files
             if path == "/" or path == "":
@@ -291,6 +332,46 @@ class CMSHandler(SimpleHTTPRequestHandler):
                 logger.error(f"Restore failed: {e}")
                 self.send_json_response({"error": str(e)}, 400)
         
+        elif path == "/api/mcp-servers":
+            if not self.require_auth():
+                return
+            try:
+                body = self.read_body()
+                name = body.get("name", "").strip()
+                
+                if not name:
+                    self.send_json_response({"error": "Server name is required"}, 400)
+                    return
+                
+                config = load_mcp_config()
+                if name in config.get("mcpServers", {}):
+                    self.send_json_response({"error": "Server with this name already exists"}, 400)
+                    return
+                
+                server_config = {
+                    "type": body.get("type", "stdio"),
+                    "command": body.get("command", ""),
+                    "args": body.get("args", [])
+                }
+                
+                if body.get("env"):
+                    server_config["env"] = body.get("env")
+                if body.get("disabled"):
+                    server_config["disabled"] = True
+                
+                if "mcpServers" not in config:
+                    config["mcpServers"] = {}
+                config["mcpServers"][name] = server_config
+                
+                if save_mcp_config(config):
+                    logger.info(f"Created MCP server: {name}")
+                    self.send_json_response({"success": True, "name": name}, 201)
+                else:
+                    self.send_json_response({"error": "Failed to save config"}, 500)
+            except Exception as e:
+                logger.error(f"Create MCP server failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
         else:
             self.send_json_response({"error": "Not found"}, 404)
     
@@ -319,6 +400,49 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     self.send_json_response({"error": "Not found"}, 404)
             except ValueError:
                 self.send_json_response({"error": "Invalid ID"}, 400)
+        
+        elif path.startswith("/api/mcp-servers/"):
+            if not self.require_auth():
+                return
+            try:
+                # URL decode the server name
+                server_name = unquote(path.split("/api/mcp-servers/")[1])
+                body = self.read_body()
+                
+                config = load_mcp_config()
+                if server_name not in config.get("mcpServers", {}):
+                    self.send_json_response({"error": "Server not found"}, 404)
+                    return
+                
+                server = config["mcpServers"][server_name]
+                
+                # Update fields if provided
+                if "type" in body:
+                    server["type"] = body["type"]
+                if "command" in body:
+                    server["command"] = body["command"]
+                if "args" in body:
+                    server["args"] = body["args"]
+                if "env" in body:
+                    if body["env"]:
+                        server["env"] = body["env"]
+                    elif "env" in server:
+                        del server["env"]
+                if "disabled" in body:
+                    if body["disabled"]:
+                        server["disabled"] = True
+                    elif "disabled" in server:
+                        del server["disabled"]
+                
+                if save_mcp_config(config):
+                    logger.info(f"Updated MCP server: {server_name}")
+                    self.send_json_response({"success": True, "name": server_name})
+                else:
+                    self.send_json_response({"error": "Failed to save config"}, 500)
+            except Exception as e:
+                logger.error(f"Update MCP server failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
         else:
             self.send_json_response({"error": "Not found"}, 404)
     
@@ -338,6 +462,29 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     self.send_json_response({"error": "Not found"}, 404)
             except ValueError:
                 self.send_json_response({"error": "Invalid ID"}, 400)
+        
+        elif path.startswith("/api/mcp-servers/"):
+            if not self.require_auth():
+                return
+            try:
+                server_name = unquote(path.split("/api/mcp-servers/")[1])
+                
+                config = load_mcp_config()
+                if server_name not in config.get("mcpServers", {}):
+                    self.send_json_response({"error": "Server not found"}, 404)
+                    return
+                
+                del config["mcpServers"][server_name]
+                
+                if save_mcp_config(config):
+                    logger.info(f"Deleted MCP server: {server_name}")
+                    self.send_json_response({"success": True})
+                else:
+                    self.send_json_response({"error": "Failed to save config"}, 500)
+            except Exception as e:
+                logger.error(f"Delete MCP server failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
         else:
             self.send_json_response({"error": "Not found"}, 404)
 
