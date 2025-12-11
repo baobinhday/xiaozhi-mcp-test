@@ -44,6 +44,7 @@
             <span class="icon">⬆</span> Restore
           </button>
           <input type="file" id="restore-file-input" accept=".json" style="display: none;">
+          <input type="file" id="mcp-restore-file-input" accept=".json" style="display: none;">
           <button id="add-endpoint-btn" class="btn btn-primary">
             <span class="icon">+</span> Add Endpoint
           </button>
@@ -176,22 +177,38 @@
           </div>
           <div class="form-group">
             <label for="mcp-server-type">Type</label>
-            <select id="mcp-server-type" name="type" class="form-select">
-              <option value="stdio">stdio</option>
+            <select id="mcp-server-type" name="type" class="form-select" onchange="toggleMcpTypeFields()">
+              <option value="stdio">stdio (Local Process)</option>
+              <option value="http">http (Remote API)</option>
             </select>
           </div>
-          <div class="form-group">
-            <label for="mcp-server-command">Command</label>
-            <input type="text" id="mcp-server-command" name="command" required placeholder="e.g., python, npx">
+          <!-- stdio fields -->
+          <div id="stdio-fields">
+            <div class="form-group">
+              <label for="mcp-server-command">Command</label>
+              <input type="text" id="mcp-server-command" name="command" placeholder="e.g., python, npx">
+            </div>
+            <div class="form-group">
+              <label for="mcp-server-args">Arguments (one per line)</label>
+              <textarea id="mcp-server-args" name="args" rows="3"
+                placeholder="e.g., mcp_server/calculator_server.py"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="mcp-server-env">Environment Variables (KEY=VALUE, one per line)</label>
+              <textarea id="mcp-server-env" name="env" rows="2" placeholder="e.g., API_KEY=${API_KEY}"></textarea>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="mcp-server-args">Arguments (one per line)</label>
-            <textarea id="mcp-server-args" name="args" rows="3"
-              placeholder="e.g., mcp_server/calculator_server.py"></textarea>
-          </div>
-          <div class="form-group">
-            <label for="mcp-server-env">Environment Variables (KEY=VALUE, one per line)</label>
-            <textarea id="mcp-server-env" name="env" rows="2" placeholder="e.g., API_KEY=${API_KEY}"></textarea>
+          <!-- http fields -->
+          <div id="http-fields" class="hidden">
+            <div class="form-group">
+              <label for="mcp-server-url">URL</label>
+              <input type="url" id="mcp-server-url" name="url" placeholder="e.g., https://mcp.example.com/mcp">
+            </div>
+            <div class="form-group">
+              <label for="mcp-server-headers">Headers (KEY=VALUE, one per line)</label>
+              <textarea id="mcp-server-headers" name="headers" rows="2"
+                placeholder="e.g., API_KEY=your_api_key"></textarea>
+            </div>
           </div>
           <div class="form-group checkbox-group">
             <label class="checkbox-label">
@@ -533,25 +550,35 @@
       mcpServersList.classList.remove('hidden');
       mcpEmptyState.classList.add('hidden');
 
-      mcpServersList.innerHTML = mcpServers.map(server => `
-        <div class="endpoint-card ${server.disabled ? 'disabled' : ''}">
-          <div class="endpoint-status">
-            <span class="status-dot ${server.disabled ? 'inactive' : 'active'}"></span>
+      mcpServersList.innerHTML = mcpServers.map(server => {
+        const isHttp = server.type === 'http';
+        const serverDetails = isHttp
+          ? `<strong>URL:</strong> ${escapeHtml(server.url || '')}`
+          : `<strong>${escapeHtml(server.command)}</strong> ${escapeHtml((server.args || []).join(' '))}`;
+        const metaInfo = isHttp
+          ? `Type: ${escapeHtml(server.type)}${server.headers && Object.keys(server.headers).length ? ' • Has headers' : ''}`
+          : `Type: ${escapeHtml(server.type)}${server.env && Object.keys(server.env).length ? ' • Has env vars' : ''}`;
+
+        return `
+          <div class="endpoint-card ${server.disabled ? 'disabled' : ''}">
+            <div class="endpoint-status">
+              <span class="status-dot ${server.disabled ? 'inactive' : 'active'}"></span>
+            </div>
+            <div class="endpoint-info">
+              <h3 class="endpoint-name">${escapeHtml(server.name)}</h3>
+              <p class="endpoint-url">${serverDetails}</p>
+              <p class="endpoint-meta">${metaInfo}</p>
+            </div>
+            <div class="endpoint-actions">
+              <button class="btn btn-sm btn-toggle" onclick="toggleMcpServer('${escapeHtml(server.name)}', ${server.disabled})">
+                ${server.disabled ? 'Enable' : 'Disable'}
+              </button>
+              <button class="btn btn-sm btn-edit" onclick="editMcpServer('${escapeHtml(server.name)}')">Edit</button>
+              <button class="btn btn-sm btn-delete" onclick="confirmMcpDelete('${escapeHtml(server.name)}')">Delete</button>
+            </div>
           </div>
-          <div class="endpoint-info">
-            <h3 class="endpoint-name">${escapeHtml(server.name)}</h3>
-            <p class="endpoint-url"><strong>${escapeHtml(server.command)}</strong> ${escapeHtml(server.args.join(' '))}</p>
-            <p class="endpoint-meta">Type: ${escapeHtml(server.type)}${server.env ? ' • Has env vars' : ''}</p>
-          </div>
-          <div class="endpoint-actions">
-            <button class="btn btn-sm btn-toggle" onclick="toggleMcpServer('${escapeHtml(server.name)}', ${server.disabled})">
-              ${server.disabled ? 'Enable' : 'Disable'}
-            </button>
-            <button class="btn btn-sm btn-edit" onclick="editMcpServer('${escapeHtml(server.name)}')">Edit</button>
-            <button class="btn btn-sm btn-delete" onclick="confirmMcpDelete('${escapeHtml(server.name)}')">Delete</button>
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     function showMcpServerModal(title = 'Add MCP Server', server = null) {
@@ -561,13 +588,26 @@
       document.getElementById('mcp-server-type').value = server?.type || 'stdio';
       document.getElementById('mcp-server-command').value = server?.command || '';
       document.getElementById('mcp-server-args').value = server?.args?.join('\n') || '';
+      document.getElementById('mcp-server-url').value = server?.url || '';
 
       // Convert env object to KEY=VALUE format
       const envStr = server?.env ? Object.entries(server.env).map(([k, v]) => `${k}=${v}`).join('\n') : '';
       document.getElementById('mcp-server-env').value = envStr;
+
+      // Convert headers object to KEY=VALUE format
+      const headersStr = server?.headers ? Object.entries(server.headers).map(([k, v]) => `${k}=${v}`).join('\n') : '';
+      document.getElementById('mcp-server-headers').value = headersStr;
+
       document.getElementById('mcp-server-enabled').checked = !server?.disabled;
 
+      toggleMcpTypeFields();
       mcpModalOverlay.classList.remove('hidden');
+    }
+
+    function toggleMcpTypeFields() {
+      const type = document.getElementById('mcp-server-type').value;
+      document.getElementById('stdio-fields').classList.toggle('hidden', type !== 'stdio');
+      document.getElementById('http-fields').classList.toggle('hidden', type !== 'http');
     }
 
     function hideMcpServerModal() {
@@ -693,32 +733,8 @@
       if (e.target === deleteModalOverlay) hideDeleteModal();
     });
 
-    // Backup and Restore handlers
-    backupBtn.addEventListener('click', async () => {
-      try {
-        const response = await apiRequest('/api/backup');
-        if (response.ok) {
-          const data = await response.json();
-          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `mcp_endpoints_backup_${new Date().toISOString().split('T')[0]}.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        } else {
-          alert('Failed to create backup');
-        }
-      } catch (error) {
-        alert('Error creating backup: ' + error.message);
-      }
-    });
 
-    restoreBtn.addEventListener('click', () => {
-      restoreFileInput.click();
-    });
+    // Backup and Restore: handlers are below after restoreFileInput change handler
 
     restoreFileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
@@ -761,6 +777,104 @@
       restoreFileInput.value = '';
     });
 
+    // MCP Config Backup button - dynamically updates based on current tab
+    backupBtn.addEventListener('click', async () => {
+      if (currentTab === 'mcp-servers') {
+        // Backup MCP Config
+        try {
+          const response = await apiRequest('/api/mcp-config/backup');
+          if (response.ok) {
+            const data = await response.json();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mcp_config_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } else {
+            alert('Failed to create backup');
+          }
+        } catch (error) {
+          alert('Error creating backup: ' + error.message);
+        }
+      } else {
+        // Existing endpoints backup
+        try {
+          const response = await apiRequest('/api/backup');
+          if (response.ok) {
+            const data = await response.json();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mcp_endpoints_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } else {
+            alert('Failed to create backup');
+          }
+        } catch (error) {
+          alert('Error creating backup: ' + error.message);
+        }
+      }
+    });
+
+    restoreBtn.addEventListener('click', () => {
+      if (currentTab === 'mcp-servers') {
+        document.getElementById('mcp-restore-file-input').click();
+      } else {
+        restoreFileInput.click();
+      }
+    });
+
+    // MCP Config Restore file handler
+    document.getElementById('mcp-restore-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (!data.mcpServers || typeof data.mcpServers !== 'object') {
+          alert('Invalid MCP config backup file format');
+          e.target.value = '';
+          return;
+        }
+
+        const serverCount = Object.keys(data.mcpServers).length;
+        const confirmMsg = `Are you sure you want to restore from backup?\n\nThis will replace all ${mcpServers.length} current MCP servers with ${serverCount} servers from the backup file.\n\nThis action cannot be undone.`;
+
+        if (!confirm(confirmMsg)) {
+          e.target.value = '';
+          return;
+        }
+
+        const response = await apiRequest('/api/mcp-config/restore', {
+          method: 'POST',
+          body: JSON.stringify({ mcpServers: data.mcpServers })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          alert(`Successfully restored ${result.restored} MCP servers`);
+          await fetchMcpServers();
+        } else {
+          const error = await response.json();
+          alert('Restore failed: ' + (error.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error restoring backup: ' + error.message);
+      }
+
+      e.target.value = '';
+    });
+
     // Tab event listeners
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -778,6 +892,8 @@
       const command = document.getElementById('mcp-server-command').value.trim();
       const argsText = document.getElementById('mcp-server-args').value;
       const envText = document.getElementById('mcp-server-env').value;
+      const url = document.getElementById('mcp-server-url').value.trim();
+      const headersText = document.getElementById('mcp-server-headers').value;
       const enabled = document.getElementById('mcp-server-enabled').checked;
 
       const args = argsText.split('\n').map(a => a.trim()).filter(a => a);
@@ -791,14 +907,34 @@
         }
       });
 
-      const serverData = {
-        name,
-        type,
-        command,
-        args,
-        env: Object.keys(env).length > 0 ? env : null,
-        disabled: !enabled
-      };
+      // Parse headers
+      const headers = {};
+      headersText.split('\n').forEach(line => {
+        const eq = line.indexOf('=');
+        if (eq > 0) {
+          headers[line.substring(0, eq).trim()] = line.substring(eq + 1).trim();
+        }
+      });
+
+      let serverData;
+      if (type === 'http') {
+        serverData = {
+          name,
+          type,
+          url,
+          headers: Object.keys(headers).length > 0 ? headers : null,
+          disabled: !enabled
+        };
+      } else {
+        serverData = {
+          name,
+          type,
+          command,
+          args,
+          env: Object.keys(env).length > 0 ? env : null,
+          disabled: !enabled
+        };
+      }
 
       let success;
       if (originalName) {

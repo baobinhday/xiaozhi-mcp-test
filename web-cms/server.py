@@ -234,9 +234,27 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     "command": server.get("command", ""),
                     "args": server.get("args", []),
                     "env": server.get("env", {}),
+                    "url": server.get("url", ""),
+                    "headers": server.get("headers", {}),
                     "disabled": server.get("disabled", False)
                 })
             self.send_json_response({"servers": servers})
+        
+        elif path == "/api/mcp-config/backup":
+            if not self.require_auth():
+                return
+            config = load_mcp_config()
+            backup_data = {
+                "version": "1.0",
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "mcpServers": config.get("mcpServers", {})
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", "attachment; filename=mcp_config_backup.json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(backup_data, indent=2).encode())
         
         else:
             # Serve static files
@@ -348,14 +366,24 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     self.send_json_response({"error": "Server with this name already exists"}, 400)
                     return
                 
-                server_config = {
-                    "type": body.get("type", "stdio"),
-                    "command": body.get("command", ""),
-                    "args": body.get("args", [])
-                }
+                server_type = body.get("type", "stdio")
                 
-                if body.get("env"):
-                    server_config["env"] = body.get("env")
+                if server_type == "http":
+                    server_config = {
+                        "type": "http",
+                        "url": body.get("url", "")
+                    }
+                    if body.get("headers"):
+                        server_config["headers"] = body.get("headers")
+                else:
+                    server_config = {
+                        "type": server_type,
+                        "command": body.get("command", ""),
+                        "args": body.get("args", [])
+                    }
+                    if body.get("env"):
+                        server_config["env"] = body.get("env")
+                
                 if body.get("disabled"):
                     server_config["disabled"] = True
                 
@@ -370,6 +398,29 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     self.send_json_response({"error": "Failed to save config"}, 500)
             except Exception as e:
                 logger.error(f"Create MCP server failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
+        elif path == "/api/mcp-config/restore":
+            if not self.require_auth():
+                return
+            try:
+                body = self.read_body()
+                mcp_servers = body.get("mcpServers", {})
+                
+                if not mcp_servers:
+                    self.send_json_response({"error": "No mcpServers data provided"}, 400)
+                    return
+                
+                # Replace entire config
+                new_config = {"mcpServers": mcp_servers}
+                
+                if save_mcp_config(new_config):
+                    logger.info(f"Restored {len(mcp_servers)} MCP servers from backup")
+                    self.send_json_response({"success": True, "restored": len(mcp_servers)})
+                else:
+                    self.send_json_response({"error": "Failed to save config"}, 500)
+            except Exception as e:
+                logger.error(f"Restore MCP config failed: {e}")
                 self.send_json_response({"error": str(e)}, 400)
         
         else:
@@ -416,18 +467,47 @@ class CMSHandler(SimpleHTTPRequestHandler):
                 
                 server = config["mcpServers"][server_name]
                 
-                # Update fields if provided
+                # Update type and clean up type-specific fields
                 if "type" in body:
-                    server["type"] = body["type"]
-                if "command" in body:
-                    server["command"] = body["command"]
-                if "args" in body:
-                    server["args"] = body["args"]
-                if "env" in body:
-                    if body["env"]:
-                        server["env"] = body["env"]
-                    elif "env" in server:
-                        del server["env"]
+                    new_type = body["type"]
+                    server["type"] = new_type
+                    
+                    # Clean up fields that don't belong to this type
+                    if new_type == "http":
+                        # Remove stdio-specific fields
+                        for key in ["command", "args", "env"]:
+                            if key in server:
+                                del server[key]
+                    else:
+                        # Remove http-specific fields
+                        for key in ["url", "headers"]:
+                            if key in server:
+                                del server[key]
+                
+                # Update type-specific fields
+                server_type = server.get("type", "stdio")
+                
+                if server_type == "http":
+                    # HTTP type fields
+                    if "url" in body:
+                        server["url"] = body["url"]
+                    if "headers" in body:
+                        if body["headers"]:
+                            server["headers"] = body["headers"]
+                        elif "headers" in server:
+                            del server["headers"]
+                else:
+                    # stdio type fields
+                    if "command" in body:
+                        server["command"] = body["command"]
+                    if "args" in body:
+                        server["args"] = body["args"]
+                    if "env" in body:
+                        if body["env"]:
+                            server["env"] = body["env"]
+                        elif "env" in server:
+                            del server["env"]
+                
                 if "disabled" in body:
                     if body["disabled"]:
                         server["disabled"] = True
