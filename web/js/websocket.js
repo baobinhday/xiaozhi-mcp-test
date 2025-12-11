@@ -76,6 +76,17 @@ function connect() {
   // Strip /mcp suffix if present - browser connects to hub root, not MCP tool path
   endpoint = endpoint.replace(/\/mcp\/?(\?.*)?$/, '$1');
 
+  // If endpoint is localhost, replace with current window hostname
+  // This allows connecting to the server when accessing from a different device
+  if (endpoint.includes('//localhost') || endpoint.includes('//127.0.0.1')) {
+    const hostname = window.location.hostname;
+    // Don't replace if we're actually on localhost
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      endpoint = endpoint.replace('//localhost', `//${hostname}`).replace('//127.0.0.1', `//${hostname}`);
+      log('info', `Adjusted endpoint to: ${endpoint}`);
+    }
+  }
+
   try {
     log('info', `Connecting to ${endpoint}...`);
     state.websocket = new WebSocket(endpoint);
