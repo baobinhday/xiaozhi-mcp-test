@@ -25,7 +25,7 @@ The system consists of three main components:
 └─────────────┘                     └─────────────┘                  └─────────────┘
 ```
 
-1. `mcp_pipe.py` reads endpoints from SQLite database and `mcp_config.json`
+1. `mcp_pipe.py` reads endpoints from SQLite database and `data/mcp_config.json`
 2. Connects to WebSocket endpoints for each enabled server
 3. Spawns MCP server subprocess (e.g., `calculator_server.py`)
 4. Pipes WebSocket messages to subprocess stdin
@@ -37,7 +37,7 @@ The system consists of three main components:
 | Module | Purpose |
 |--------|---------|
 | `main.py` | Entry point, server orchestration |
-| `config.py` | Configuration loading from `.env` and `mcp_config.json` |
+| `config.py` | Configuration loading from `.env` and `data/mcp_config.json` |
 | `connection.py` | WebSocket connection with exponential backoff retry |
 | `pipe.py` | stdin/stdout/stderr piping between WebSocket and subprocess |
 | `server_builder.py` | Build server commands from config |
@@ -126,7 +126,7 @@ cd web-cms && python3 server.py
 
 Default credentials: `admin` / `changeme` (configure via `CMS_USERNAME`, `CMS_PASSWORD` in `.env`)
 
-### Server Config (`mcp_config.json`)
+### Server Config (`data/mcp_config.json`)
 ```json
 {
   "mcpServers": {
@@ -182,7 +182,7 @@ Default credentials: `admin` / `changeme` (configure via `CMS_USERNAME`, `CMS_PA
        mcp.run(transport="stdio")
    ```
 
-3. Add to `mcp_config.json`:
+3. Add to `data/mcp_config.json`:
    ```json
    "my_server": {
      "type": "stdio",
@@ -215,7 +215,8 @@ Default credentials: `admin` / `changeme` (configure via `CMS_USERNAME`, `CMS_PA
 │   └── app.js                # Client-side JavaScript
 ├── pyproject.toml            # Project config & dependencies
 ├── requirements.txt          # Legacy dependencies
-├── mcp_config.json           # MCP server definitions
+├── mcp_config.example.json   # MCP server definitions template
+├── data/mcp_config.json      # MCP server definitions (gitignored)
 ├── mcp_pipe.py               # Entry point wrapper
 └── ARCHITECTURE.md           # Architecture documentation
 ```

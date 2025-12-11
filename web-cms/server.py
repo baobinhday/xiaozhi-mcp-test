@@ -60,7 +60,7 @@ logging.basicConfig(
 logger = logging.getLogger('CMS')
 
 # MCP Config file path
-MCP_CONFIG_PATH = Path(__file__).parent.parent / "mcp_config.json"
+MCP_CONFIG_PATH = Path(__file__).parent.parent / "data" / "mcp_config.json"
 
 
 def load_mcp_config() -> dict:

@@ -38,6 +38,9 @@ COPY --from=dependencies /usr/local/bin /usr/local/bin
 # Copy application code
 COPY . .
 
+# Create data directory and copy example config (can be mounted over at runtime)
+RUN mkdir -p /app/data && cp /app/mcp_config.example.json /app/data/mcp_config.json
+
 # Expose ports
 # 8888 for web UI
 # 8889 for WebSocket hub
@@ -45,7 +48,7 @@ COPY . .
 EXPOSE 8888 8889 8890
 
 # Runtime environment variables (can be overridden with -e or docker-compose)
-ENV MCP_CONFIG=/app/mcp_config.json \
+ENV MCP_CONFIG=/app/data/mcp_config.json \
     CONTEXT7_API_KEY="" \
     PERPLEXITY_API_KEY="" \
     CMS_USERNAME=admin \

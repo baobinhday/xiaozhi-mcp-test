@@ -49,6 +49,8 @@ async def connect_with_retry(uri: str, target: str) -> None:
             backoff = min(backoff * 2, MAX_BACKOFF)
 
 
+from urllib.parse import urlparse
+
 async def connect_to_server(uri: str, target: str) -> None:
     """Connect to WebSocket server and pipe stdio.
 
@@ -59,6 +61,12 @@ async def connect_to_server(uri: str, target: str) -> None:
     process: Optional[subprocess.Popen] = None
 
     try:
+        # Auto-fix URI if missing /mcp path (common configuration error)
+        parsed = urlparse(uri)
+        if parsed.path == "" or parsed.path == "/":
+            logger.warning(f"[{target}] Endpoint URL '{uri}' missing '/mcp' path. Appending automatically.")
+            uri = uri.rstrip("/") + "/mcp"
+
         logger.info(f"[{target}] Connecting to WebSocket server...")
 
         # Add server name to URI for hub identification

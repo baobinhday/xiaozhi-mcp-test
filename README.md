@@ -87,7 +87,8 @@ python3 mcp_pipe.py mcp_server/calculator_server.py
 ├── mcp_server/          # MCP server scripts
 ├── web/                 # Web interface
 ├── pyproject.toml       # Python project configuration
-├── mcp_config.json      # MCP server definitions
+├── mcp_config.example.json  # MCP server definitions template
+├── data/mcp_config.json     # MCP server definitions (gitignored)
 └── mcp_pipe.py          # Entry point script
 ```
 

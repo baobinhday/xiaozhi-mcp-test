@@ -41,7 +41,7 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Configuration dictionary or empty dict if not found/invalid
     """
-    path = os.environ.get("MCP_CONFIG") or os.path.join(os.getcwd(), "mcp_config.json")
+    path = os.environ.get("MCP_CONFIG") or os.path.join(os.getcwd(), "data", "mcp_config.json")
 
     if not os.path.exists(path):
         return {}

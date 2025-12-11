@@ -397,6 +397,11 @@ async def handle_connection(websocket, path):
     
     if path == "/mcp" or path.startswith("/mcp"):
         client_type = "mcp"
+    elif "?" in path and "server=" in path:
+         # Fallback: Check if it's an MCP tool via query param even if path is wrong
+        client_type = "mcp"
+    
+    if client_type == "mcp":
         # Extract server name from query string
         server_name = "unknown"
         if "?" in path:

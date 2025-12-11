@@ -16,7 +16,7 @@ services:
         required: false
     environment:
       # Path to MCP config file inside container
-      - MCP_CONFIG=${MCP_CONFIG:-/app/mcp_config.json}
+      - MCP_CONFIG=${MCP_CONFIG:-/app/data/mcp_config.json}
     # Persist database
     volumes:
       - ./data:/app/data

@@ -57,7 +57,7 @@ docker rm mcp-tester
 
 ### Environment Variables
 
-- `MCP_CONFIG`: Path to MCP config file (default: `/app/mcp_config.json`)
+- `MCP_CONFIG`: Path to MCP config file (default: `/app/data/mcp_config.json`)
 - `CONTEXT7_API_KEY`: API Key for Context7 (required if using Context7 tool)
 - `PERPLEXITY_API_KEY`: API Key for Perplexity (required if using Perplexity tool)
 - `CMS_USERNAME`: CMS admin username (default: `admin`)
