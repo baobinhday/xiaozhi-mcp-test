@@ -18,6 +18,27 @@ INITIAL_BACKOFF = 1  # Initial wait time in seconds
 MAX_BACKOFF = 600  # Maximum wait time in seconds
 
 
+def get_config_path() -> str:
+    """Get the path to the MCP config file.
+    
+    Returns:
+        Path to the config file
+    """
+    return os.environ.get("MCP_CONFIG") or os.path.join(os.getcwd(), "data", "mcp_config.json")
+
+
+def get_config_mtime() -> float:
+    """Get the modification time of the config file.
+    
+    Returns:
+        Modification time as float, or 0 if file doesn't exist
+    """
+    path = get_config_path()
+    if os.path.exists(path):
+        return os.path.getmtime(path)
+    return 0
+
+
 def get_all_endpoint_urls() -> list[dict]:
     """Get all enabled MCP endpoint URLs from database.
     
