@@ -43,6 +43,30 @@ def cache_tools_for_cms(server_name: str, tools: list) -> None:
         logger.error(f"Failed to cache tools for CMS: {e}")
 
 
+def remove_tools_from_cache(server_name: str) -> None:
+    """Remove tools from cache when MCP server is disabled.
+    
+    Args:
+        server_name: Name of the MCP server to remove from cache
+    """
+    try:
+        if not os.path.exists(TOOLS_CACHE_PATH):
+            return
+        
+        with open(TOOLS_CACHE_PATH, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+        
+        if server_name in cache:
+            del cache[server_name]
+            
+            with open(TOOLS_CACHE_PATH, "w", encoding="utf-8") as f:
+                json.dump(cache, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"[{server_name}] Removed tools from cache")
+    except Exception as e:
+        logger.error(f"Failed to remove tools from cache: {e}")
+
+
 def load_tools_config() -> dict:
     """Load tools configuration from file.
     

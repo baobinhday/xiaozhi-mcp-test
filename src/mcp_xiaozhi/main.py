@@ -8,6 +8,7 @@ from typing import Optional
 
 from .config import get_all_endpoint_urls, get_config_mtime, get_enabled_servers, load_config
 from .connection import connect_with_retry
+from .tools_filter import remove_tools_from_cache
 from .utils import setup_logging
 
 logger = setup_logging()
@@ -75,6 +76,9 @@ async def _run_servers(target_arg: Optional[str]) -> None:
     
     if disabled:
         logger.info(f"Skipping disabled servers: {', '.join(disabled)}")
+        # Clean up cache for disabled servers on startup
+        for server_name in disabled:
+            remove_tools_from_cache(server_name)
     
     if not enabled and not target_arg:
         raise RuntimeError("No enabled mcpServers found in config")
@@ -123,6 +127,10 @@ async def _run_servers(target_arg: Optional[str]) -> None:
                 except (asyncio.CancelledError, asyncio.TimeoutError):
                     pass
                 del running_tasks[task_key]
+            
+            # Remove tools from cache for disabled servers
+            for server_name in removed_servers:
+                remove_tools_from_cache(server_name)
             
             enabled = new_enabled
             disabled = new_disabled
