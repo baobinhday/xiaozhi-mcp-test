@@ -45,8 +45,7 @@ COPY . .
 
 # Create data directory and copy example configs (can be mounted over at runtime)
 RUN mkdir -p /app/data && \
-    cp /app/mcp_config.example.json /app/data/mcp_config.json && \
-    cp /app/tools_config.example.json /app/data/tools_config.json
+    cp /app/mcp_config.example.json /app/data/mcp_config.json
 
 # Expose ports
 # 8888 for web UI
@@ -74,11 +73,6 @@ RUN echo '#!/bin/bash\n\
     echo "Creating mcp_config.json from example..."\n\
     cp /app/mcp_config.example.json /app/data/mcp_config.json\n\
     fi\n\
-    if [ ! -f /app/data/tools_config.json ]; then\n\
-    echo "Creating tools_config.json from example..."\n\
-    cp /app/tools_config.example.json /app/data/tools_config.json\n\
-    fi\n\
-    \n\
     # Start the web server in the background\n\
     echo "Starting Web Server on port 8888..."\n\
     cd /app/web && python3 server.py &\n\

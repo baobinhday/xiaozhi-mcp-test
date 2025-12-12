@@ -7,11 +7,11 @@ from typing import Any
 
 logger = logging.getLogger("MCP_PIPE")
 
-# Path to tools config file
-TOOLS_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "tools_config.json")
-
 # Path to tools cache file (all tools from MCP servers, for CMS)
 TOOLS_CACHE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "tools_cache.json")
+
+# Import database functions for tool settings
+from src.mcp_xiaozhi.database import get_disabled_tools, get_custom_tools
 
 
 def cache_tools_for_cms(server_name: str, tools: list) -> None:
@@ -68,18 +68,19 @@ def remove_tools_from_cache(server_name: str) -> None:
 
 
 def load_tools_config() -> dict:
-    """Load tools configuration from file.
+    """Load tools configuration from database.
     
     Returns:
         Dictionary with disabledTools and customTools
     """
     try:
-        if os.path.exists(TOOLS_CONFIG_PATH):
-            with open(TOOLS_CONFIG_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+        return {
+            "disabledTools": get_disabled_tools(),
+            "customTools": get_custom_tools()
+        }
     except Exception as e:
-        logger.debug(f"Failed to load tools config: {e}")
-    return {"disabledTools": {}, "customTools": {}}
+        logger.debug(f"Failed to load tools config from DB: {e}")
+        return {"disabledTools": {}, "customTools": {}}
 
 
 def filter_tools_response(message: str, server_name: str, include_disabled: bool = False) -> str:

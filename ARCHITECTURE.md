@@ -33,9 +33,8 @@ The system consists of three independent components with **clear separation of c
 - **Role**: Admin panel for managing configuration files
 - **Important**: The CMS **NEVER** connects to the Hub - it only manages files!
 - **Manages**:
-  - `data/app.db` - WebSocket endpoint URLs
+  - `data/app.db` - WebSocket endpoint URLs + tool settings (enable/disable, custom names)
   - `data/mcp_config.json` - MCP server definitions
-  - `data/tools_config.json` - Individual tool enable/disable & custom names
   - `data/tools_cache.json` - Cached tool list from bridge (read-only)
 - **Features**:
   - CRUD for endpoints and MCP servers
@@ -51,7 +50,7 @@ The system consists of three independent components with **clear separation of c
   - Spawns MCP server subprocesses
   - Pipes messages between WebSocket and subprocess stdio
   - Hot-reloads when config changes
-  - Filters tools based on `tools_config.json`
+  - Filters tools based on tool settings in `app.db`
   - Writes `tools_cache.json` for CMS to read
 - **Users**: The system (runs as a background process)
 
@@ -61,7 +60,7 @@ The system consists of three independent components with **clear separation of c
                         ┌─────────────────────────────────────────────────────────┐
                         │                    CONFIG FILES                         │
                         │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐ │
-                        │  │ app.db │ │mcp_config.json│ │tools_config.json│ │
+                        │  │  app.db (endpoints + tool settings)  │ │mcp_config.json│ │
                         │  └──────┬───────┘ └──────┬───────┘ └────────┬─────────┘ │
                         │         │                │                   │          │
                         └─────────┼────────────────┼───────────────────┼──────────┘
@@ -289,9 +288,8 @@ Default credentials: `admin` / `changeme` (configure via `CMS_USERNAME`, `CMS_PA
 │   ├── index.html            # Admin dashboard UI
 │   └── style.css             # Admin styles
 ├── data/                     # Data files (gitignored)
-│   ├── app.db          # SQLite database for endpoints
+│   ├── app.db                # SQLite database for endpoints & tool settings
 │   ├── mcp_config.json       # MCP server definitions
-│   ├── tools_config.json     # Tool enable/disable & custom names
 │   └── tools_cache.json      # Cached tools list from bridge
 ├── pyproject.toml            # Project config & dependencies
 ├── requirements.txt          # Legacy dependencies
