@@ -62,6 +62,12 @@ logger = logging.getLogger('CMS')
 # MCP Config file path
 MCP_CONFIG_PATH = Path(__file__).parent.parent / "data" / "mcp_config.json"
 
+# Tools config file path (for enabling/disabling individual tools)
+TOOLS_CONFIG_PATH = Path(__file__).parent.parent / "data" / "tools_config.json"
+
+# Tools cache file path (cached tools from bridge, for CMS)
+TOOLS_CACHE_PATH = Path(__file__).parent.parent / "data" / "tools_cache.json"
+
 
 def load_mcp_config() -> dict:
     """Load MCP config from mcp_config.json."""
@@ -82,6 +88,30 @@ def save_mcp_config(config: dict) -> bool:
         return True
     except Exception as e:
         logger.error(f"Error saving mcp_config.json: {e}")
+        return False
+
+
+def load_tools_config() -> dict:
+    """Load tools config from tools_config.json."""
+    try:
+        if TOOLS_CONFIG_PATH.exists():
+            with open(TOOLS_CONFIG_PATH, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading tools_config.json: {e}")
+    return {"disabledTools": {}}
+
+
+def save_tools_config(config: dict) -> bool:
+    """Save tools config to tools_config.json."""
+    try:
+        # Ensure data directory exists
+        TOOLS_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(TOOLS_CONFIG_PATH, 'w') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving tools_config.json: {e}")
         return False
 
 
@@ -256,6 +286,33 @@ class CMSHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(backup_data, indent=2).encode())
         
+        elif path == "/api/mcp-tools":
+            if not self.require_auth():
+                return
+            # Get tools config for disabled tools and custom metadata
+            tools_config = load_tools_config()
+            disabled_tools = tools_config.get("disabledTools", {})
+            custom_tools = tools_config.get("customTools", {})
+            self.send_json_response({
+                "disabledTools": disabled_tools,
+                "customTools": custom_tools
+            })
+        
+        elif path == "/api/mcp-tools/cache":
+            if not self.require_auth():
+                return
+            # Get cached tools list from bridge (unfiltered, all tools)
+            try:
+                if TOOLS_CACHE_PATH.exists():
+                    with open(TOOLS_CACHE_PATH, 'r') as f:
+                        tools_cache = json.load(f)
+                    self.send_json_response({"tools": tools_cache})
+                else:
+                    self.send_json_response({"tools": {}})
+            except Exception as e:
+                logger.error(f"Error reading tools cache: {e}")
+                self.send_json_response({"tools": {}})
+        
         else:
             # Serve static files
             if path == "/" or path == "":
@@ -421,6 +478,124 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     self.send_json_response({"error": "Failed to save config"}, 500)
             except Exception as e:
                 logger.error(f"Restore MCP config failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
+        elif path == "/api/mcp-tools/toggle":
+            if not self.require_auth():
+                return
+            try:
+                body = self.read_body()
+                server_name = body.get("serverName", "").strip()
+                tool_name = body.get("toolName", "").strip()
+                enabled = body.get("enabled", True)
+                
+                if not server_name or not tool_name:
+                    self.send_json_response({"error": "serverName and toolName are required"}, 400)
+                    return
+                
+                tools_config = load_tools_config()
+                disabled_tools = tools_config.get("disabledTools", {})
+                
+                if not enabled:
+                    # Disable the tool
+                    if server_name not in disabled_tools:
+                        disabled_tools[server_name] = []
+                    if tool_name not in disabled_tools[server_name]:
+                        disabled_tools[server_name].append(tool_name)
+                        logger.info(f"Disabled tool '{tool_name}' from server '{server_name}'")
+                else:
+                    # Enable the tool
+                    if server_name in disabled_tools and tool_name in disabled_tools[server_name]:
+                        disabled_tools[server_name].remove(tool_name)
+                        logger.info(f"Enabled tool '{tool_name}' from server '{server_name}'")
+                        # Clean up empty server entries
+                        if not disabled_tools[server_name]:
+                            del disabled_tools[server_name]
+                
+                tools_config["disabledTools"] = disabled_tools
+                
+                if save_tools_config(tools_config):
+                    self.send_json_response({"success": True, "enabled": enabled})
+                else:
+                    self.send_json_response({"error": "Failed to save config"}, 500)
+            except Exception as e:
+                logger.error(f"Toggle tool failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
+        elif path == "/api/mcp-tools/update":
+            if not self.require_auth():
+                return
+            try:
+                body = self.read_body()
+                server_name = body.get("serverName", "").strip()
+                tool_name = body.get("toolName", "").strip()
+                custom_name = body.get("customName", "").strip()
+                custom_description = body.get("customDescription", "").strip()
+                
+                if not server_name or not tool_name:
+                    self.send_json_response({"error": "serverName and toolName are required"}, 400)
+                    return
+                
+                tools_config = load_tools_config()
+                custom_tools = tools_config.get("customTools", {})
+                
+                # Initialize server entry if needed
+                if server_name not in custom_tools:
+                    custom_tools[server_name] = {}
+                
+                # Store custom metadata
+                tool_meta = {}
+                if custom_name:
+                    tool_meta["name"] = custom_name
+                if custom_description:
+                    tool_meta["description"] = custom_description
+                
+                if tool_meta:
+                    custom_tools[server_name][tool_name] = tool_meta
+                    logger.info(f"Updated tool '{tool_name}' from server '{server_name}': {tool_meta}")
+                
+                tools_config["customTools"] = custom_tools
+                
+                if save_tools_config(tools_config):
+                    self.send_json_response({"success": True, "customMeta": tool_meta})
+                else:
+                    self.send_json_response({"error": "Failed to save config"}, 500)
+            except Exception as e:
+                logger.error(f"Update tool failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
+        elif path == "/api/mcp-tools/reset":
+            if not self.require_auth():
+                return
+            try:
+                body = self.read_body()
+                server_name = body.get("serverName", "").strip()
+                tool_name = body.get("toolName", "").strip()
+                
+                if not server_name or not tool_name:
+                    self.send_json_response({"error": "serverName and toolName are required"}, 400)
+                    return
+                
+                tools_config = load_tools_config()
+                custom_tools = tools_config.get("customTools", {})
+                
+                # Remove custom metadata
+                if server_name in custom_tools and tool_name in custom_tools[server_name]:
+                    del custom_tools[server_name][tool_name]
+                    logger.info(f"Reset tool '{tool_name}' from server '{server_name}'")
+                    
+                    # Clean up empty server entries
+                    if not custom_tools[server_name]:
+                        del custom_tools[server_name]
+                
+                tools_config["customTools"] = custom_tools
+                
+                if save_tools_config(tools_config):
+                    self.send_json_response({"success": True})
+                else:
+                    self.send_json_response({"error": "Failed to save config"}, 500)
+            except Exception as e:
+                logger.error(f"Reset tool failed: {e}")
                 self.send_json_response({"error": str(e)}, 400)
         
         else:

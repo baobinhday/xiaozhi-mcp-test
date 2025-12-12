@@ -66,6 +66,7 @@ def generate_session_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+
 def create_session(username: str) -> str:
     """Create a new session for a user."""
     token = generate_session_token()
@@ -107,6 +108,7 @@ class WebSocketHub:
         self.server_tools = {}        # Dict: server_name -> list of tools
         self.tool_registry = {}       # Dict: tool_name -> server_name (for routing)
         self.pending_inits = set()    # Track servers waiting for initialize response
+        self.pending_tools_requests = {}  # Dict: request_id -> asyncio.Event for refresh
         
     async def register_browser(self, websocket):
         """Register a browser client."""
@@ -183,6 +185,56 @@ class WebSocketHub:
         """Broadcast connection status to all browser clients."""
         for client in self.browser_clients.copy():
             await self.send_status(client)
+    
+    async def refresh_all_tools(self, timeout: float = 3.0):
+        """Request fresh tools from all MCP servers.
+        
+        This clears the current cache and requests tools/list from each server,
+        so the bridge will apply the latest filter from tools_config.json.
+        """
+        if not self.mcp_tools:
+            return
+        
+        # Clear current cache to force fresh data
+        self.server_tools.clear()
+        self.tool_registry.clear()
+        
+        # Create events for each server to track responses
+        import asyncio
+        events = {}
+        
+        for server_name in list(self.mcp_tools.keys()):
+            request_id = f"refresh_tools_{server_name}_{id(self)}"
+            events[server_name] = asyncio.Event()
+            self.pending_tools_requests[request_id] = (server_name, events[server_name])
+            
+            try:
+                tools_request = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": "tools/list",
+                    "params": {}
+                }
+                await self.mcp_tools[server_name].send(json.dumps(tools_request))
+                logger.info(f"Requested tools refresh from '{server_name}'")
+            except Exception as e:
+                logger.error(f"Failed to request tools from '{server_name}': {e}")
+                events[server_name].set()  # Mark as done to not block
+        
+        # Wait for all responses with timeout
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*[event.wait() for event in events.values()]),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Timeout waiting for tools refresh responses")
+        
+        # Clean up pending requests
+        for request_id in list(self.pending_tools_requests.keys()):
+            if request_id.startswith("refresh_tools_"):
+                del self.pending_tools_requests[request_id]
+            
             
     async def forward_to_mcp(self, message: str, server_name: str = None) -> bool:
         """Forward a message from browser to specific MCP tool or broadcast to all."""
@@ -251,9 +303,12 @@ class WebSocketHub:
                 logger.info("Browser sent initialized notification")
                 return True  # Don't forward this
             
-            # Intercept tools/list to aggregate from all servers
+            # Intercept tools/list to get fresh tools from all servers
+            # Hub requests fresh tools from each MCP server -> bridge applies latest filter
             elif method == "tools/list":
-                logger.info("Intercepting tools/list request")
+                logger.info("Intercepting tools/list request - refreshing from all servers")
+                # Refresh tools from all MCP servers to get latest filter state
+                await self.refresh_all_tools(timeout=3.0)
                 tools = self.get_cached_aggregated_tools()
                 response = {
                     "jsonrpc": "2.0",
@@ -343,6 +398,12 @@ class WebSocketHub:
                     if tool_name:
                         self.tool_registry[tool_name] = server_name
                         logger.info(f"  - Registered tool '{tool_name}' from '{server_name}'")
+                
+                # Check if this is a response to a refresh request
+                request_id = msg.get("id", "")
+                if request_id in self.pending_tools_requests:
+                    _, event = self.pending_tools_requests[request_id]
+                    event.set()  # Signal that this server has responded
             else:
                 logger.debug(f"Message from {server_name} is not a tools/list response")
                         
@@ -352,7 +413,11 @@ class WebSocketHub:
             pass
     
     def get_cached_aggregated_tools(self) -> list:
-        """Return aggregated tools from cache with conflict resolution."""
+        """Return aggregated tools from cache with conflict resolution.
+        
+        Hub is a pure pass-through: bridge handles all filtering and custom metadata.
+        This method only aggregates tools from multiple servers and handles name conflicts.
+        """
         all_tools = []
         tool_names_seen = set()
         

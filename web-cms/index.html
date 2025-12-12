@@ -57,6 +57,7 @@
         <div class="tab-nav">
           <button class="tab-btn active" data-tab="endpoints">📡 Endpoints</button>
           <button class="tab-btn" data-tab="mcp-servers">⚙️ MCP Servers</button>
+          <button class="tab-btn" data-tab="mcp-tools">🔧 Tools</button>
         </div>
 
         <!-- Endpoints Tab -->
@@ -107,6 +108,41 @@
             <div id="mcp-empty-state" class="empty-state hidden">
               <p>No MCP servers configured</p>
               <p class="text-muted">Click "Add Server" to get started</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- MCP Tools Tab -->
+        <div id="mcp-tools-tab" class="tab-content hidden">
+          <div class="stats-bar">
+            <div class="stat-item">
+              <span class="stat-value" id="tools-total-count">0</span>
+              <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="tools-enabled-count">0</span>
+              <span class="stat-label">Enabled</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="tools-disabled-count">0</span>
+              <span class="stat-label">Disabled</span>
+            </div>
+            <div class="stat-item" style="margin-left: auto;">
+              <select id="tools-server-filter" class="form-select" style="min-width: 200px;">
+                <option value="">All Servers</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="mcp-tools-container">
+            <div id="mcp-tools-list" class="endpoints-grid"></div>
+            <div id="tools-empty-state" class="empty-state hidden">
+              <p>No tools available</p>
+              <p class="text-muted">Connect MCP servers to see their tools here</p>
+            </div>
+            <div id="tools-loading-state" class="loading-state">
+              <p>Loading tools from MCP servers...</p>
+              <p class="text-muted">Make sure the Web Tester server is running at port 8888</p>
             </div>
           </div>
         </div>
@@ -241,6 +277,33 @@
         </div>
       </div>
     </div>
+
+    <!-- Tool Edit Modal -->
+    <div id="tool-edit-modal-overlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="tool-edit-modal-title">Edit Tool</h2>
+          <button id="tool-edit-modal-close" class="btn-icon">&times;</button>
+        </div>
+        <form id="tool-edit-form">
+          <input type="hidden" id="tool-edit-server-name">
+          <input type="hidden" id="tool-edit-tool-name">
+          <input type="hidden" id="tool-edit-original-desc">
+          <div class="form-group">
+            <label for="tool-edit-custom-desc">Custom Description</label>
+            <textarea id="tool-edit-custom-desc" name="customDescription" rows="3"
+              placeholder="Leave empty to use original description"></textarea>
+            <p class="text-muted" style="font-size: 0.8rem; margin-top: 0.25rem;">Original: <span
+                id="tool-edit-original-desc-display"></span></p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="tool-reset-btn" class="btn btn-warning">Reset to Original</button>
+            <button type="button" id="tool-edit-cancel" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -250,6 +313,10 @@
     let mcpServers = [];
     let deleteMcpServerName = null;
     let currentTab = 'endpoints';
+    let mcpTools = [];  // All tools from connected MCP servers
+    let disabledTools = {};  // {serverName: [toolName, ...]}
+    let customTools = {};  // {serverName: {toolName: {name, description}}}
+    let toolsServerFilter = '';  // Filter by server name
 
     // DOM Elements
     const loginView = document.getElementById('login-view');
@@ -283,6 +350,19 @@
     const mcpDeleteModalOverlay = document.getElementById('mcp-delete-modal-overlay');
     const deleteMcpServerNameEl = document.getElementById('delete-mcp-server-name');
     const confirmMcpDeleteBtn = document.getElementById('confirm-mcp-delete-btn');
+
+    // MCP Tools DOM Elements
+    const mcpToolsList = document.getElementById('mcp-tools-list');
+    const toolsEmptyState = document.getElementById('tools-empty-state');
+    const toolsLoadingState = document.getElementById('tools-loading-state');
+    const toolsServerFilterEl = document.getElementById('tools-server-filter');
+
+    // Tool Edit Modal DOM Elements
+    const toolEditModalOverlay = document.getElementById('tool-edit-modal-overlay');
+    const toolEditForm = document.getElementById('tool-edit-form');
+    const toolEditModalClose = document.getElementById('tool-edit-modal-close');
+    const toolEditCancel = document.getElementById('tool-edit-cancel');
+    const toolResetBtn = document.getElementById('tool-reset-btn');
 
     // API Functions
     async function apiRequest(path, options = {}) {
@@ -380,6 +460,257 @@
       });
       return response.ok;
     }
+
+    // MCP Tools API Functions
+    async function fetchToolsConfig() {
+      const response = await apiRequest('/api/mcp-tools');
+      if (response.ok) {
+        const data = await response.json();
+        disabledTools = data.disabledTools || {};
+        customTools = data.customTools || {};
+      }
+    }
+
+    async function updateToolMeta(serverName, toolName, customName, customDescription) {
+      const response = await apiRequest('/api/mcp-tools/update', {
+        method: 'POST',
+        body: JSON.stringify({ serverName, toolName, customName, customDescription })
+      });
+      return response.ok;
+    }
+
+    async function resetToolMeta(serverName, toolName) {
+      const response = await apiRequest('/api/mcp-tools/reset', {
+        method: 'POST',
+        body: JSON.stringify({ serverName, toolName })
+      });
+      return response.ok;
+    }
+
+    async function toggleToolEnabled(serverName, toolName, enabled) {
+      const response = await apiRequest('/api/mcp-tools/toggle', {
+        method: 'POST',
+        body: JSON.stringify({ serverName, toolName, enabled })
+      });
+      if (response.ok) {
+        // Update local state
+        if (!enabled) {
+          if (!disabledTools[serverName]) disabledTools[serverName] = [];
+          if (!disabledTools[serverName].includes(toolName)) {
+            disabledTools[serverName].push(toolName);
+          }
+        } else {
+          if (disabledTools[serverName]) {
+            disabledTools[serverName] = disabledTools[serverName].filter(t => t !== toolName);
+            if (disabledTools[serverName].length === 0) delete disabledTools[serverName];
+          }
+        }
+        renderMcpTools();
+        updateToolsStats();
+      }
+      return response.ok;
+    }
+
+    async function fetchMcpTools() {
+      // Fetch tools from bridge cache file via REST API (not WebSocket hub)
+      // CMS reads directly from cache file, not from hub
+      toolsLoadingState.classList.remove('hidden');
+      toolsEmptyState.classList.add('hidden');
+      mcpToolsList.innerHTML = '';
+
+      try {
+        // Fetch tools config (disabled tools, custom descriptions)
+        await fetchToolsConfig();
+
+        // Fetch cached tools list from bridge (all tools, unfiltered)
+        const response = await apiRequest('/api/mcp-tools/cache');
+        if (response.ok) {
+          const data = await response.json();
+          // Convert {serverName: [tools]} to flat array with server info
+          mcpTools = [];
+          for (const [serverName, tools] of Object.entries(data.tools || {})) {
+            for (const tool of tools) {
+              // Add server info to description for display
+              mcpTools.push({
+                ...tool,
+                description: `[${serverName}] ${tool.description || ''}`,
+                _serverName: serverName  // Store server name for filtering
+              });
+            }
+          }
+        } else {
+          throw new Error('Failed to fetch tools cache');
+        }
+
+        updateServerFilter();
+        renderMcpTools();
+        updateToolsStats();
+        toolsLoadingState.classList.add('hidden');
+
+      } catch (error) {
+        console.error('Failed to fetch MCP tools:', error);
+        toolsLoadingState.classList.add('hidden');
+        mcpTools = [];
+        updateToolsStats();
+
+        if (mcpTools.length === 0) {
+          toolsEmptyState.classList.remove('hidden');
+        }
+      }
+    }
+
+
+
+    function updateServerFilter() {
+      const servers = new Set();
+      mcpTools.forEach(tool => {
+        // Extract server name from description [serverName] ...
+        const match = tool.description?.match(/^\[([^\]]+)\]/);
+        if (match) servers.add(match[1]);
+      });
+
+      toolsServerFilterEl.innerHTML = '<option value="">All Servers</option>';
+      servers.forEach(server => {
+        toolsServerFilterEl.innerHTML += `<option value="${escapeHtml(server)}">${escapeHtml(server)}</option>`;
+      });
+    }
+
+    function updateToolsStats() {
+      const total = mcpTools.length;
+      let disabled = 0;
+
+      mcpTools.forEach(tool => {
+        const match = tool.description?.match(/^\[([^\]]+)\]/);
+        const serverName = match ? match[1] : 'unknown';
+        if (disabledTools[serverName]?.includes(tool.name)) {
+          disabled++;
+        }
+      });
+
+      const enabled = total - disabled;
+
+      document.getElementById('tools-total-count').textContent = total;
+      document.getElementById('tools-enabled-count').textContent = enabled;
+      document.getElementById('tools-disabled-count').textContent = disabled;
+    }
+
+    function renderMcpTools() {
+      let filteredTools = mcpTools;
+
+      if (toolsServerFilter) {
+        filteredTools = mcpTools.filter(tool => {
+          const match = tool.description?.match(/^\[([^\]]+)\]/);
+          return match && match[1] === toolsServerFilter;
+        });
+      }
+
+      if (filteredTools.length === 0) {
+        mcpToolsList.innerHTML = '';
+        if (mcpTools.length === 0) {
+          toolsEmptyState.classList.remove('hidden');
+        }
+        return;
+      }
+
+      toolsEmptyState.classList.add('hidden');
+
+      mcpToolsList.innerHTML = filteredTools.map(tool => {
+        const match = tool.description?.match(/^\[([^\]]+)\]\s*(.*)/);
+        const serverName = match ? match[1] : 'unknown';
+        const originalDescription = match ? match[2] : tool.description;
+        const isDisabled = disabledTools[serverName]?.includes(tool.name) || false;
+
+        // Check for custom metadata
+        const toolCustom = customTools[serverName]?.[tool.name] || {};
+        const displayName = toolCustom.name || tool.name;
+        const displayDescription = toolCustom.description || originalDescription;
+        const hasCustomMeta = toolCustom.name || toolCustom.description;
+
+        return `
+          <div class="endpoint-card ${isDisabled ? 'disabled' : ''}">
+            <div class="endpoint-status">
+              <span class="status-dot ${isDisabled ? 'inactive' : 'active'}"></span>
+            </div>
+            <div class="endpoint-info">
+              <h3 class="endpoint-name">
+                ${escapeHtml(displayName)}
+                ${hasCustomMeta ? '<span style="font-size: 0.75rem; color: var(--accent-blue); margin-left: 0.5rem;">✎ custom</span>' : ''}
+              </h3>
+              <p class="endpoint-url">${escapeHtml(displayDescription || 'No description')}</p>
+              <p class="endpoint-meta">Server: ${escapeHtml(serverName)} • Tool: ${escapeHtml(tool.name)}</p>
+            </div>
+            <div class="endpoint-actions">
+              <button class="btn btn-sm btn-edit" onclick="openToolEditModal('${escapeHtml(serverName)}', '${escapeHtml(tool.name)}', '${escapeHtml(originalDescription || '')}')">Edit</button>
+              <button class="btn btn-sm btn-toggle" onclick="handleToolToggle('${escapeHtml(serverName)}', '${escapeHtml(tool.name)}', ${isDisabled})">
+                ${isDisabled ? 'Enable' : 'Disable'}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function handleToolToggle(serverName, toolName, isCurrentlyDisabled) {
+      // If currently disabled, we want to enable it (enabled=true)
+      // If currently enabled (not disabled), we want to disable it (enabled=false)
+      await toggleToolEnabled(serverName, toolName, isCurrentlyDisabled);
+    }
+
+    // Tool Edit Modal Functions
+    function openToolEditModal(serverName, toolName, originalDescription) {
+      document.getElementById('tool-edit-server-name').value = serverName;
+      document.getElementById('tool-edit-tool-name').value = toolName;
+      document.getElementById('tool-edit-original-desc').value = originalDescription;
+      document.getElementById('tool-edit-original-desc-display').textContent = originalDescription || 'No description';
+      document.getElementById('tool-edit-modal-title').textContent = `Edit Tool: ${toolName}`;
+
+      // Pre-fill with existing custom values if any
+      const toolCustom = customTools[serverName]?.[toolName] || {};
+      document.getElementById('tool-edit-custom-desc').value = toolCustom.description || '';
+
+      toolEditModalOverlay.classList.remove('hidden');
+    }
+
+    function hideToolEditModal() {
+      toolEditModalOverlay.classList.add('hidden');
+      toolEditForm.reset();
+    }
+
+    // Tool Edit Modal Event Listeners
+    toolEditModalClose?.addEventListener('click', hideToolEditModal);
+    toolEditCancel?.addEventListener('click', hideToolEditModal);
+    toolEditModalOverlay?.addEventListener('click', (e) => {
+      if (e.target === toolEditModalOverlay) hideToolEditModal();
+    });
+
+    toolEditForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const serverName = document.getElementById('tool-edit-server-name').value;
+      const toolName = document.getElementById('tool-edit-tool-name').value;
+      const customName = document.getElementById('tool-edit-custom-name').value.trim();
+      const customDescription = document.getElementById('tool-edit-custom-desc').value.trim();
+
+      if (await updateToolMeta(serverName, toolName, customName, customDescription)) {
+        hideToolEditModal();
+        await fetchToolsConfig();
+        renderMcpTools();
+      } else {
+        alert('Failed to update tool metadata');
+      }
+    });
+
+    toolResetBtn?.addEventListener('click', async () => {
+      const serverName = document.getElementById('tool-edit-server-name').value;
+      const toolName = document.getElementById('tool-edit-tool-name').value;
+
+      if (await resetToolMeta(serverName, toolName)) {
+        hideToolEditModal();
+        await fetchToolsConfig();
+        renderMcpTools();
+      } else {
+        alert('Failed to reset tool metadata');
+      }
+    });
 
     // UI Functions
     function showView(view) {
@@ -527,7 +858,18 @@
         addEndpointBtn.parentNode.insertBefore(addMcpBtn, addEndpointBtn);
       }
       addMcpBtn.style.display = tab === 'mcp-servers' ? '' : 'none';
+
+      // Load tools when switching to MCP Tools tab
+      if (tab === 'mcp-tools') {
+        fetchMcpTools();
+      }
     }
+
+    // Server filter event listener
+    toolsServerFilterEl?.addEventListener('change', (e) => {
+      toolsServerFilter = e.target.value;
+      renderMcpTools();
+    });
 
     // MCP Server UI Functions
     function updateMcpStats() {

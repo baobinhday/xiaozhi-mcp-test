@@ -43,8 +43,10 @@ COPY --from=dependencies /usr/local/bin /usr/local/bin
 # Copy application code
 COPY . .
 
-# Create data directory and copy example config (can be mounted over at runtime)
-RUN mkdir -p /app/data && cp /app/mcp_config.example.json /app/data/mcp_config.json
+# Create data directory and copy example configs (can be mounted over at runtime)
+RUN mkdir -p /app/data && \
+    cp /app/mcp_config.example.json /app/data/mcp_config.json && \
+    cp /app/tools_config.example.json /app/data/tools_config.json
 
 # Expose ports
 # 8888 for web UI
@@ -54,7 +56,6 @@ EXPOSE 8888 8889 8890
 
 # Runtime environment variables (can be overridden with -e or docker-compose)
 ENV MCP_CONFIG=/app/data/mcp_config.json \
-    CONTEXT7_API_KEY="" \
     PERPLEXITY_API_KEY="" \
     CMS_USERNAME=admin \
     CMS_PASSWORD=changeme \
@@ -72,6 +73,10 @@ RUN echo '#!/bin/bash\n\
     if [ ! -f /app/data/mcp_config.json ]; then\n\
     echo "Creating mcp_config.json from example..."\n\
     cp /app/mcp_config.example.json /app/data/mcp_config.json\n\
+    fi\n\
+    if [ ! -f /app/data/tools_config.json ]; then\n\
+    echo "Creating tools_config.json from example..."\n\
+    cp /app/tools_config.example.json /app/data/tools_config.json\n\
     fi\n\
     \n\
     # Start the web server in the background\n\
