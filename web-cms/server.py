@@ -313,6 +313,23 @@ class CMSHandler(SimpleHTTPRequestHandler):
                 logger.error(f"Error reading tools cache: {e}")
                 self.send_json_response({"tools": {}})
         
+        elif path == "/api/mcp-tools/backup":
+            if not self.require_auth():
+                return
+            tools_config = load_tools_config()
+            backup_data = {
+                "version": "1.0",
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "disabledTools": tools_config.get("disabledTools", {}),
+                "customTools": tools_config.get("customTools", {})
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", "attachment; filename=tools_config_backup.json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(backup_data, indent=2).encode())
+        
         else:
             # Serve static files
             if path == "/" or path == "":
@@ -596,6 +613,33 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     self.send_json_response({"error": "Failed to save config"}, 500)
             except Exception as e:
                 logger.error(f"Reset tool failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
+        elif path == "/api/mcp-tools/restore":
+            if not self.require_auth():
+                return
+            try:
+                body = self.read_body()
+                disabled_tools = body.get("disabledTools", {})
+                custom_tools = body.get("customTools", {})
+                
+                if not isinstance(disabled_tools, dict):
+                    self.send_json_response({"error": "Invalid disabledTools format"}, 400)
+                    return
+                
+                # Replace entire tools config
+                new_config = {
+                    "disabledTools": disabled_tools,
+                    "customTools": custom_tools
+                }
+                
+                if save_tools_config(new_config):
+                    logger.info(f"Restored tools config from backup")
+                    self.send_json_response({"success": True})
+                else:
+                    self.send_json_response({"error": "Failed to save config"}, 500)
+            except Exception as e:
+                logger.error(f"Restore tools config failed: {e}")
                 self.send_json_response({"error": str(e)}, 400)
         
         else:

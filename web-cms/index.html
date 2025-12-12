@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCP Endpoints CMS</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
 </head>
 
 <body>
@@ -37,14 +39,6 @@
       <header class="dashboard-header">
         <h1>🔌 MCP Endpoints</h1>
         <div class="header-actions">
-          <button id="backup-btn" class="btn btn-success" title="Download database backup">
-            <span class="icon">⬇</span> Backup
-          </button>
-          <button id="restore-btn" class="btn btn-warning" title="Restore from backup file">
-            <span class="icon">⬆</span> Restore
-          </button>
-          <input type="file" id="restore-file-input" accept=".json" style="display: none;">
-          <input type="file" id="mcp-restore-file-input" accept=".json" style="display: none;">
           <button id="add-endpoint-btn" class="btn btn-primary">
             <span class="icon">+</span> Add Endpoint
           </button>
@@ -75,6 +69,17 @@
               <span class="stat-value" id="disabled-count">0</span>
               <span class="stat-label">Disabled</span>
             </div>
+            <div class="stat-item" style="margin-left: auto;">
+              <div class="flex flex-col gap-2">
+                <button id="endpoints-backup-btn" class="btn btn-sm btn-success" title="Download endpoints backup">
+                  ⬇ Backup
+                </button>
+                <button id="endpoints-restore-btn" class="btn btn-sm btn-warning" title="Restore from backup file">
+                  ⬆ Restore
+                </button>
+                <input type="file" id="endpoints-restore-file-input" accept=".json" style="display: none;">
+              </div>
+            </div>
           </div>
 
           <div id="endpoints-container">
@@ -100,6 +105,17 @@
             <div class="stat-item">
               <span class="stat-value" id="mcp-disabled-count">0</span>
               <span class="stat-label">Disabled</span>
+            </div>
+            <div class="stat-item" style="margin-left: auto;">
+              <div class="flex flex-col gap-2">
+                <button id="mcp-backup-btn" class="btn btn-sm btn-success" title="Download MCP config backup">
+                  ⬇ Backup
+                </button>
+                <button id="mcp-restore-btn" class="btn btn-sm btn-warning" title="Restore from backup file">
+                  ⬆ Restore
+                </button>
+                <input type="file" id="mcp-restore-file-input" accept=".json" style="display: none;">
+              </div>
             </div>
           </div>
 
@@ -127,10 +143,19 @@
               <span class="stat-value" id="tools-disabled-count">0</span>
               <span class="stat-label">Disabled</span>
             </div>
-            <div class="stat-item" style="margin-left: auto;">
-              <select id="tools-server-filter" class="form-select" style="min-width: 200px;">
+            <div class="stat-item" style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
+              <select id="tools-server-filter" class="form-select" style="min-width: 150px;">
                 <option value="">All Servers</option>
               </select>
+              <div class="flex flex-col gap-2">
+                <button id="tools-backup-btn" class="btn btn-sm btn-success" title="Download tools config backup">
+                  ⬇ Backup
+                </button>
+                <button id="tools-restore-btn" class="btn btn-sm btn-warning" title="Restore from backup file">
+                  ⬆ Restore
+                </button>
+                <input type="file" id="tools-restore-file-input" accept=".json" style="display: none;">
+              </div>
             </div>
           </div>
 
@@ -335,9 +360,6 @@
     const deleteModalOverlay = document.getElementById('delete-modal-overlay');
     const deleteEndpointName = document.getElementById('delete-endpoint-name');
     const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
-    const backupBtn = document.getElementById('backup-btn');
-    const restoreBtn = document.getElementById('restore-btn');
-    const restoreFileInput = document.getElementById('restore-file-input');
 
     // MCP Server DOM Elements
     const mcpServersList = document.getElementById('mcp-servers-list');
@@ -1078,7 +1100,34 @@
 
     // Backup and Restore: handlers are below after restoreFileInput change handler
 
-    restoreFileInput.addEventListener('change', async (e) => {
+    // === ENDPOINTS BACKUP/RESTORE ===
+    document.getElementById('endpoints-backup-btn').addEventListener('click', async () => {
+      try {
+        const response = await apiRequest('/api/backup');
+        if (response.ok) {
+          const data = await response.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `mcp_endpoints_backup_${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          alert('Failed to create backup');
+        }
+      } catch (error) {
+        alert('Error creating backup: ' + error.message);
+      }
+    });
+
+    document.getElementById('endpoints-restore-btn').addEventListener('click', () => {
+      document.getElementById('endpoints-restore-file-input').click();
+    });
+
+    document.getElementById('endpoints-restore-file-input').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
 
@@ -1088,14 +1137,14 @@
 
         if (!data.endpoints || !Array.isArray(data.endpoints)) {
           alert('Invalid backup file format');
-          restoreFileInput.value = '';
+          e.target.value = '';
           return;
         }
 
         const confirmMsg = `Are you sure you want to restore from backup?\n\nThis will replace all ${endpoints.length} current endpoints with ${data.endpoints.length} endpoints from the backup file.\n\nThis action cannot be undone.`;
 
         if (!confirm(confirmMsg)) {
-          restoreFileInput.value = '';
+          e.target.value = '';
           return;
         }
 
@@ -1116,65 +1165,36 @@
         alert('Error restoring backup: ' + error.message);
       }
 
-      restoreFileInput.value = '';
+      e.target.value = '';
     });
 
-    // MCP Config Backup button - dynamically updates based on current tab
-    backupBtn.addEventListener('click', async () => {
-      if (currentTab === 'mcp-servers') {
-        // Backup MCP Config
-        try {
-          const response = await apiRequest('/api/mcp-config/backup');
-          if (response.ok) {
-            const data = await response.json();
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `mcp_config_backup_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          } else {
-            alert('Failed to create backup');
-          }
-        } catch (error) {
-          alert('Error creating backup: ' + error.message);
+    // === MCP SERVERS BACKUP/RESTORE ===
+    document.getElementById('mcp-backup-btn').addEventListener('click', async () => {
+      try {
+        const response = await apiRequest('/api/mcp-config/backup');
+        if (response.ok) {
+          const data = await response.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `mcp_config_backup_${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          alert('Failed to create backup');
         }
-      } else {
-        // Existing endpoints backup
-        try {
-          const response = await apiRequest('/api/backup');
-          if (response.ok) {
-            const data = await response.json();
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `mcp_endpoints_backup_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          } else {
-            alert('Failed to create backup');
-          }
-        } catch (error) {
-          alert('Error creating backup: ' + error.message);
-        }
+      } catch (error) {
+        alert('Error creating backup: ' + error.message);
       }
     });
 
-    restoreBtn.addEventListener('click', () => {
-      if (currentTab === 'mcp-servers') {
-        document.getElementById('mcp-restore-file-input').click();
-      } else {
-        restoreFileInput.click();
-      }
+    document.getElementById('mcp-restore-btn').addEventListener('click', () => {
+      document.getElementById('mcp-restore-file-input').click();
     });
 
-    // MCP Config Restore file handler
     document.getElementById('mcp-restore-file-input').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1206,6 +1226,81 @@
           const result = await response.json();
           alert(`Successfully restored ${result.restored} MCP servers`);
           await fetchMcpServers();
+        } else {
+          const error = await response.json();
+          alert('Restore failed: ' + (error.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error restoring backup: ' + error.message);
+      }
+
+      e.target.value = '';
+    });
+
+    // === TOOLS BACKUP/RESTORE ===
+    document.getElementById('tools-backup-btn').addEventListener('click', async () => {
+      try {
+        const response = await apiRequest('/api/mcp-tools/backup');
+        if (response.ok) {
+          const data = await response.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `tools_config_backup_${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          alert('Failed to create backup');
+        }
+      } catch (error) {
+        alert('Error creating backup: ' + error.message);
+      }
+    });
+
+    document.getElementById('tools-restore-btn').addEventListener('click', () => {
+      document.getElementById('tools-restore-file-input').click();
+    });
+
+    document.getElementById('tools-restore-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (!data.disabledTools || typeof data.disabledTools !== 'object') {
+          alert('Invalid tools config backup file format');
+          e.target.value = '';
+          return;
+        }
+
+        const disabledCount = Object.keys(data.disabledTools).length;
+        const customCount = Object.keys(data.customTools || {}).length;
+        const confirmMsg = `Are you sure you want to restore from backup?\n\nThis will replace all current tools configuration with the backup (${disabledCount} server(s) with disabled tools, ${customCount} server(s) with custom tools).\n\nThis action cannot be undone.`;
+
+        if (!confirm(confirmMsg)) {
+          e.target.value = '';
+          return;
+        }
+
+        const response = await apiRequest('/api/mcp-tools/restore', {
+          method: 'POST',
+          body: JSON.stringify({
+            disabledTools: data.disabledTools,
+            customTools: data.customTools || {}
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          alert('Successfully restored tools configuration');
+          await fetchToolsConfig();
+          renderMcpTools();
+          updateToolsStats();
         } else {
           const error = await response.json();
           alert('Restore failed: ' + (error.error || 'Unknown error'));
