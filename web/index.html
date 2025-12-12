@@ -329,6 +329,11 @@
                         <!-- Custom Tools Panel (hidden by default) -->
                         <div id="custom-tools-panel" class="hidden space-y-2">
                             <p class="text-xs text-zinc-500">Select tools to use in chat:</p>
+                            <label
+                                class="flex items-center gap-2 p-1 rounded hover:bg-white/5 cursor-pointer border-b border-white/10 pb-2 mb-1">
+                                <input type="checkbox" id="select-all-tools" class="w-4 h-4 accent-indigo-500">
+                                <span class="text-sm text-zinc-300 font-medium">Select All</span>
+                            </label>
                             <div id="custom-tools-list"
                                 class="max-h-[150px] overflow-y-auto bg-[#1c1c26] border border-white/10 rounded-lg p-2 space-y-1">
                                 <p class="text-xs text-zinc-500 italic">Connect to MCP to see available tools</p>
