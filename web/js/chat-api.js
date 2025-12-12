@@ -120,9 +120,23 @@ async function callChatAPI() {
   // Build messages array
   const messages = [];
 
-  // Add system prompt
+  // Add system prompt with current time
+  const currentTime = new Date().toLocaleString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short'
+  });
+  const timeContext = `Current date and time: ${currentTime}`;
+
   if (systemPrompt) {
-    messages.push({ role: 'system', content: systemPrompt });
+    messages.push({ role: 'system', content: `${systemPrompt}\n\n${timeContext}` });
+  } else {
+    messages.push({ role: 'system', content: timeContext });
   }
 
   // Add chat history (trimmed to maxHistory)
@@ -211,10 +225,13 @@ async function sendChatRequest(baseUrl, token, model, messages, tools, assistant
       const toolName = toolCall.function.name;
       const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
 
+      // Find the tool info from state.tools
+      const tool = state.tools.find(t => t.name === toolName);
+
       // Show tool execution status
       updateAssistantMessage(assistantDiv, `🔧 Calling tool: ${toolName}...`);
       log('info', `Executing tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
-      displayRequest(toolArgs);
+      displayRequest(toolArgs, tool);
 
       try {
         // Execute tool via MCP
@@ -244,8 +261,28 @@ async function sendChatRequest(baseUrl, token, model, messages, tools, assistant
     // Continue conversation with tool results
     updateAssistantMessage(assistantDiv, '💭 Processing results...');
 
+    // Build system prompt with current time
+    const currentTimeForContinuation = new Date().toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short'
+    });
+    const timeContextForContinuation = `Current date and time: ${currentTimeForContinuation}`;
+
+    let systemContent;
+    if (state.chatSettings.systemPrompt) {
+      systemContent = `${state.chatSettings.systemPrompt}\n\n${timeContextForContinuation}`;
+    } else {
+      systemContent = timeContextForContinuation;
+    }
+
     const updatedMessages = [
-      ...(state.chatSettings.systemPrompt ? [{ role: 'system', content: state.chatSettings.systemPrompt }] : []),
+      { role: 'system', content: systemContent },
       ...state.chatHistory
     ];
 

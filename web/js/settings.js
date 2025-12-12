@@ -131,6 +131,36 @@ function populateCustomToolsList() {
       <span class="text-xs text-zinc-500">(${tool.name})</span>
     </label>
   `).join('');
+
+  // Setup select all functionality
+  const selectAllCheckbox = document.getElementById('select-all-tools');
+  if (selectAllCheckbox) {
+    // Update "Select All" state based on current selections
+    updateSelectAllState();
+
+    // Handle "Select All" click
+    selectAllCheckbox.addEventListener('change', (e) => {
+      const checkboxes = document.querySelectorAll('.custom-tool-checkbox');
+      checkboxes.forEach(cb => cb.checked = e.target.checked);
+    });
+
+    // Update "Select All" when individual checkboxes change
+    listEl.addEventListener('change', (e) => {
+      if (e.target.classList.contains('custom-tool-checkbox')) {
+        updateSelectAllState();
+      }
+    });
+  }
+}
+
+function updateSelectAllState() {
+  const selectAllCheckbox = document.getElementById('select-all-tools');
+  const checkboxes = document.querySelectorAll('.custom-tool-checkbox');
+  if (!selectAllCheckbox || checkboxes.length === 0) return;
+
+  const checkedCount = document.querySelectorAll('.custom-tool-checkbox:checked').length;
+  selectAllCheckbox.checked = checkedCount === checkboxes.length;
+  selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
 }
 
 function getSelectedCustomTools() {

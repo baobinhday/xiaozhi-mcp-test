@@ -36,7 +36,7 @@ const state = {
 // ============================================
 const elements = {
   wsEndpoint: document.getElementById('ws-endpoint'),
-  connectBtn: document.getElementById('connect-btn'),
+  refreshEndpointsBtn: document.getElementById('refresh-endpoints-btn'),
   connectionStatus: document.getElementById('connection-status'),
   responsePanel: document.querySelector('.response-panel'),
   responseContent: document.getElementById('response-content'),

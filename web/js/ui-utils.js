@@ -141,9 +141,37 @@ function clearResponse() {
   `;
 }
 
-function displayRequest(data) {
-  const html = syntaxHighlightJSON(data);
-  elements.requestContent.innerHTML = `<div class="json-viewer max-h-[calc(100vh-148px)] md:max-h-[calc(100vh-600px)] font-mono text-sm leading-relaxed whitespace-pre-wrap break-words">${html}</div>`;
+function displayRequest(data, tool = null) {
+  let contentHtml = '';
+
+  if (tool) {
+    // Tool information section
+    contentHtml = `
+      <div class="tool-info mb-4 pb-4 border-b border-white/10">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-2xl">${getToolIcon(tool.name)}</span>
+          <h3 class="text-lg font-semibold text-zinc-100">${formatToolName(tool.name)}</h3>
+        </div>
+        <p class="text-xs text-zinc-500 font-mono mb-2">${escapeHtml(tool.name)}</p>
+        ${tool.description ? `<p class="text-sm text-zinc-400 leading-relaxed">${escapeHtml(tool.description)}</p>` : ''}
+      </div>
+      
+      <div class="input-schema mb-4 pb-4 border-b border-white/10">
+        <h4 class="text-sm font-semibold text-zinc-300 mb-2">📋 Input Schema</h4>
+        <div class="json-viewer font-mono text-xs leading-relaxed whitespace-pre-wrap break-words bg-[#1c1c26] p-3 rounded-lg overflow-auto max-h-[200px]">${syntaxHighlightJSON(tool.inputSchema || {})}</div>
+      </div>
+      
+      <div class="request-arguments">
+        <h4 class="text-sm font-semibold text-zinc-300 mb-2">📤 Request Arguments</h4>
+        <div class="json-viewer font-mono text-sm leading-relaxed whitespace-pre-wrap break-words bg-[#1c1c26] p-3 rounded-lg">${syntaxHighlightJSON(data)}</div>
+      </div>
+    `;
+  } else {
+    // Fallback: just show arguments
+    contentHtml = `<div class="json-viewer max-h-[calc(100vh-148px)] md:max-h-[calc(100vh-600px)] font-mono text-sm leading-relaxed whitespace-pre-wrap break-words">${syntaxHighlightJSON(data)}</div>`;
+  }
+
+  elements.requestContent.innerHTML = `<div class="request-display max-h-[calc(100vh-148px)] md:max-h-[calc(100vh-600px)] overflow-y-auto">${contentHtml}</div>`;
 }
 
 function clearRequest() {

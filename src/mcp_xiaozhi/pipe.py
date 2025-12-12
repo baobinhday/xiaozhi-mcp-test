@@ -1,6 +1,7 @@
 """I/O piping functions for MCP Xiaozhi."""
 
 import asyncio
+import json
 import logging
 import sys
 from subprocess import Popen
@@ -9,7 +10,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import websockets
 
+from .tools_filter import filter_tools_response, cache_tools_for_cms
+
 logger = logging.getLogger("MCP_PIPE")
+
+# Track pending tools/list requests to pass include_disabled flag to response
+# Key: request_id, Value: include_disabled flag
+_pending_tools_requests: dict[str, bool] = {}
 
 
 async def pipe_websocket_to_process(
@@ -33,6 +40,19 @@ async def pipe_websocket_to_process(
             # Write to process stdin (in text mode)
             if isinstance(message, bytes):
                 message = message.decode("utf-8")
+            
+            # Track tools/list requests to capture include_disabled param
+            try:
+                msg = json.loads(message)
+                if msg.get("method") == "tools/list":
+                    request_id = msg.get("id")
+                    include_disabled = msg.get("params", {}).get("include_disabled", False)
+                    if request_id:
+                        _pending_tools_requests[request_id] = include_disabled
+                        logger.debug(f"[{target}] Tracking tools/list request {request_id} (include_disabled={include_disabled})")
+            except json.JSONDecodeError:
+                pass
+            
             process.stdin.write(message + "\n")
             process.stdin.flush()
     except Exception as e:
@@ -64,6 +84,28 @@ async def pipe_process_to_websocket(
             if not data:  # If no data, the process may have ended
                 logger.info(f"[{target}] Process has ended output")
                 break
+
+            # Check if this is a tools/list response and filter it
+            try:
+                msg = json.loads(data)
+                request_id = msg.get("id")
+                
+                # Check if this is a response to a tools/list request
+                if request_id and "result" in msg and "tools" in msg.get("result", {}):
+                    # Cache ALL tools (unfiltered) for CMS before filtering
+                    tools = msg["result"]["tools"]
+                    cache_tools_for_cms(target, tools)
+                    
+                    # Always filter: hub is pure pass-through, bridge handles all filtering
+                    include_disabled = _pending_tools_requests.pop(request_id, False)
+                    
+                    # Filter the tools response for hub
+                    data = filter_tools_response(data, target, include_disabled) + "\n"
+                    logger.info(f"[{target}] Filtered tools response (include_disabled={include_disabled})")
+            except json.JSONDecodeError:
+                pass
+            except Exception as e:
+                logger.debug(f"[{target}] Error processing response: {e}")
 
             # Send data to WebSocket
             logger.debug(f"[{target}] >> {data[:120]}...")

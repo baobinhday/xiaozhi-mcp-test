@@ -17,7 +17,9 @@ docker compose logs -f
 docker compose down
 ```
 
-Then open http://localhost:8888 in your browser.
+Then open:
+- **Web UI**: http://localhost:8888
+- **CMS Admin**: http://localhost:8890
 
 ## Manual Docker Commands
 
@@ -34,8 +36,9 @@ docker run -d \
   --name mcp-tester \
   -p 8888:8888 \
   -p 8889:8889 \
-  -e MCP_ENDPOINT=ws://localhost:8889/mcp \
-  -e MCP_SCRIPT=agent_tools.py \
+  -p 8890:8890 \
+  -v $(pwd)/data:/app/data \
+  --env-file .env \
   mcp-web-tester
 ```
 
@@ -52,12 +55,19 @@ docker stop mcp-tester
 docker rm mcp-tester
 ```
 
-## Configuration
-
 ### Environment Variables
 
-- `MCP_ENDPOINT`: WebSocket endpoint (default: `ws://localhost:8889/mcp`)
-- `MCP_SCRIPT`: MCP script to run (default: `agent_tools.py`)
+- `MCP_CONFIG`: Path to MCP config file (default: `/app/data/mcp_config.json`)
+- `CONTEXT7_API_KEY`: API Key for Context7 (required if using Context7 tool)
+- `PERPLEXITY_API_KEY`: API Key for Perplexity (required if using Perplexity tool)
+- `CMS_USERNAME`: CMS admin username (default: `admin`)
+- `CMS_PASSWORD`: CMS admin password (default: `changeme`)
+- `CMS_SECRET_KEY`: CMS session secret key (default: `your-secret-key-here`)
+- `WEB_USERNAME`: Web UI auth username (default: `admin`)
+- `WEB_PASSWORD`: Web UI auth password (default: `admin123`)
+- `WEB_SECRET_KEY`: Web UI session secret key (default: `your-web-secret-key-here`)
+
+**Note:** Endpoints are configured via the CMS web interface at http://localhost:8890
 
 ### Using a Different MCP Script
 
@@ -82,6 +92,7 @@ environment:
 
 - **8888**: Web UI
 - **8889**: WebSocket Hub
+- **8890**: CMS Admin Panel
 
 ## Health Check
 
@@ -122,8 +133,8 @@ For development, you might want to mount your local code:
 docker run -d \
   -p 8888:8888 \
   -p 8889:8889 \
+  -p 8890:8890 \
   -v $(pwd):/app \
-  -e MCP_SCRIPT=agent_tools.py \
   mcp-web-tester
 ```
 

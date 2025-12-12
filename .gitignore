@@ -6,3 +6,6 @@ __pycache__/
 
 # Bỏ qua tất cả các tệp .pyc ở bất cứ đâu
 *.pyc
+
+# Database
+data/

@@ -15,10 +15,16 @@ MCP tools connect to provide tool execution.
 import asyncio
 import json
 import logging
+import os
+import secrets
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler
 import socketserver
+from urllib.parse import urlparse
+
+from dotenv import load_dotenv
 
 try:
     import websockets
@@ -29,6 +35,9 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets"])
     import websockets
     from websockets.server import serve as ws_serve
+
+# Load environment variables
+load_dotenv(override=False)
 
 # Configure logging
 logging.basicConfig(
@@ -42,6 +51,53 @@ HTTP_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8888
 WS_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8889
 WEB_DIR = Path(__file__).parent.absolute()
 
+# Authentication settings
+WEB_USERNAME = os.environ.get("WEB_USERNAME", "admin")
+WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin1asdasdfsdafdsg$####43dgsdg23")
+WEB_SECRET_KEY = os.environ.get("WEB_SECRET_KEY", secrets.token_hex(32))
+SESSION_DURATION_HOURS = 24
+
+# In-memory session storage
+sessions = {}
+
+
+def generate_session_token() -> str:
+    """Generate a secure session token."""
+    return secrets.token_urlsafe(32)
+
+
+
+def create_session(username: str) -> str:
+    """Create a new session for a user."""
+    token = generate_session_token()
+    sessions[token] = {
+        "username": username,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=SESSION_DURATION_HOURS)
+    }
+    return token
+
+
+def validate_session(token: str) -> bool:
+    """Validate a session token."""
+    if not token or token not in sessions:
+        return False
+    
+    session = sessions[token]
+    if datetime.now(timezone.utc) > session["expires_at"]:
+        del sessions[token]
+        return False
+    
+    return True
+
+
+def destroy_session(token: str) -> bool:
+    """Destroy a session."""
+    if token in sessions:
+        del sessions[token]
+        return True
+    return False
+
 
 class WebSocketHub:
     """Manages connections between browser clients and MCP tools."""
@@ -52,6 +108,7 @@ class WebSocketHub:
         self.server_tools = {}        # Dict: server_name -> list of tools
         self.tool_registry = {}       # Dict: tool_name -> server_name (for routing)
         self.pending_inits = set()    # Track servers waiting for initialize response
+        self.pending_tools_requests = {}  # Dict: request_id -> asyncio.Event for refresh
         
     async def register_browser(self, websocket):
         """Register a browser client."""
@@ -128,6 +185,56 @@ class WebSocketHub:
         """Broadcast connection status to all browser clients."""
         for client in self.browser_clients.copy():
             await self.send_status(client)
+    
+    async def refresh_all_tools(self, timeout: float = 3.0):
+        """Request fresh tools from all MCP servers.
+        
+        This clears the current cache and requests tools/list from each server,
+        so the bridge will apply the latest filter from tools_config.json.
+        """
+        if not self.mcp_tools:
+            return
+        
+        # Clear current cache to force fresh data
+        self.server_tools.clear()
+        self.tool_registry.clear()
+        
+        # Create events for each server to track responses
+        import asyncio
+        events = {}
+        
+        for server_name in list(self.mcp_tools.keys()):
+            request_id = f"refresh_tools_{server_name}_{id(self)}"
+            events[server_name] = asyncio.Event()
+            self.pending_tools_requests[request_id] = (server_name, events[server_name])
+            
+            try:
+                tools_request = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": "tools/list",
+                    "params": {}
+                }
+                await self.mcp_tools[server_name].send(json.dumps(tools_request))
+                logger.info(f"Requested tools refresh from '{server_name}'")
+            except Exception as e:
+                logger.error(f"Failed to request tools from '{server_name}': {e}")
+                events[server_name].set()  # Mark as done to not block
+        
+        # Wait for all responses with timeout
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*[event.wait() for event in events.values()]),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Timeout waiting for tools refresh responses")
+        
+        # Clean up pending requests
+        for request_id in list(self.pending_tools_requests.keys()):
+            if request_id.startswith("refresh_tools_"):
+                del self.pending_tools_requests[request_id]
+            
             
     async def forward_to_mcp(self, message: str, server_name: str = None) -> bool:
         """Forward a message from browser to specific MCP tool or broadcast to all."""
@@ -196,9 +303,12 @@ class WebSocketHub:
                 logger.info("Browser sent initialized notification")
                 return True  # Don't forward this
             
-            # Intercept tools/list to aggregate from all servers
+            # Intercept tools/list to get fresh tools from all servers
+            # Hub requests fresh tools from each MCP server -> bridge applies latest filter
             elif method == "tools/list":
-                logger.info("Intercepting tools/list request")
+                logger.info("Intercepting tools/list request - refreshing from all servers")
+                # Refresh tools from all MCP servers to get latest filter state
+                await self.refresh_all_tools(timeout=3.0)
                 tools = self.get_cached_aggregated_tools()
                 response = {
                     "jsonrpc": "2.0",
@@ -288,6 +398,12 @@ class WebSocketHub:
                     if tool_name:
                         self.tool_registry[tool_name] = server_name
                         logger.info(f"  - Registered tool '{tool_name}' from '{server_name}'")
+                
+                # Check if this is a response to a refresh request
+                request_id = msg.get("id", "")
+                if request_id in self.pending_tools_requests:
+                    _, event = self.pending_tools_requests[request_id]
+                    event.set()  # Signal that this server has responded
             else:
                 logger.debug(f"Message from {server_name} is not a tools/list response")
                         
@@ -297,7 +413,11 @@ class WebSocketHub:
             pass
     
     def get_cached_aggregated_tools(self) -> list:
-        """Return aggregated tools from cache with conflict resolution."""
+        """Return aggregated tools from cache with conflict resolution.
+        
+        Hub is a pure pass-through: bridge handles all filtering and custom metadata.
+        This method only aggregates tools from multiple servers and handles name conflicts.
+        """
         all_tools = []
         tool_names_seen = set()
         
@@ -342,6 +462,11 @@ async def handle_connection(websocket, path):
     
     if path == "/mcp" or path.startswith("/mcp"):
         client_type = "mcp"
+    elif "?" in path and "server=" in path:
+         # Fallback: Check if it's an MCP tool via query param even if path is wrong
+        client_type = "mcp"
+    
+    if client_type == "mcp":
         # Extract server name from query string
         server_name = "unknown"
         if "?" in path:
@@ -399,26 +524,159 @@ async def run_websocket_server():
 
 
 def run_http_server():
-    """Run HTTP server for static files (blocking)."""
-    class QuietHandler(SimpleHTTPRequestHandler):
+    """Run HTTP server for static files with authentication (blocking)."""
+    
+    class AuthHandler(SimpleHTTPRequestHandler):
+        """HTTP handler with session-based authentication."""
+        
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(WEB_DIR), **kwargs)
-            
+        
         def log_message(self, format, *args):
             # Skip logging certain requests or handle errors
             if args and isinstance(args[0], str):
                 if "GET / " in args[0] or "GET /style" in args[0] or "GET /app" in args[0]:
                     logger.info(f"[HTTP] {args[0]}")
-            
+        
         def end_headers(self):
             self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.send_header('Cache-Control', 'no-store')
             super().end_headers()
+        
+        def send_json_response(self, data: dict, status: int = 200):
+            """Send a JSON response."""
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode())
+        
+        def get_session_token(self) -> str:
+            """Extract session token from cookies."""
+            cookie_header = self.headers.get("Cookie", "")
+            for cookie in cookie_header.split(";"):
+                cookie = cookie.strip()
+                if cookie.startswith("web_session="):
+                    return cookie[12:]
+            return ""
+        
+        def is_authenticated(self) -> bool:
+            """Check if the request is authenticated."""
+            token = self.get_session_token()
+            return validate_session(token)
+        
+        def read_body(self) -> dict:
+            """Read and parse JSON body."""
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length == 0:
+                return {}
+            body = self.rfile.read(content_length)
+            return json.loads(body.decode())
+        
+        def do_OPTIONS(self):
+            """Handle CORS preflight requests."""
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
+        
+        def do_GET(self):
+            """Handle GET requests."""
+            parsed = urlparse(self.path)
+            path = parsed.path
+            
+            # API routes (no auth required)
+            if path == "/api/auth/check":
+                is_auth = self.is_authenticated()
+                self.send_json_response({"authenticated": is_auth})
+                return
+            
+            # API route to get endpoints (requires auth)
+            if path == "/api/endpoints":
+                if not self.is_authenticated():
+                    self.send_json_response({"error": "Unauthorized"}, 401)
+                    return
+                try:
+                    # Import database module
+                    sys.path.insert(0, str(Path(__file__).parent.parent))
+                    from src.mcp_xiaozhi.database import get_enabled_endpoints, init_db
+                    init_db()
+                    endpoints = get_enabled_endpoints()
+                    self.send_json_response({"endpoints": endpoints})
+                except Exception as e:
+                    logger.error(f"Failed to fetch endpoints: {e}")
+                    self.send_json_response({"error": str(e)}, 500)
+                return
+            
+            # Protected static files - redirect to login if not authenticated
+            # Allow CSS, JS, and fonts without auth for login page styling
+            allowed_without_auth = [
+                '/style.css', '/common.css', '/app.js', 
+                '/js/', '/login.html'
+            ]
+            
+            needs_auth = True
+            for allowed in allowed_without_auth:
+                if path.startswith(allowed) or path == allowed:
+                    needs_auth = False
+                    break
+            
+            if needs_auth and not self.is_authenticated():
+                # For root path, still serve index.html (it will show login)
+                if path == "/" or path == "":
+                    self.path = "/index.html"
+                    super().do_GET()
+                    return
+                # For other paths, return 401
+                self.send_json_response({"error": "Unauthorized"}, 401)
+                return
+            
+            # Serve static files
+            if path == "/" or path == "":
+                self.path = "/index.html"
+            super().do_GET()
+        
+        def do_POST(self):
+            """Handle POST requests."""
+            parsed = urlparse(self.path)
+            path = parsed.path
+            
+            if path == "/api/login":
+                body = self.read_body()
+                username = body.get("username", "")
+                password = body.get("password", "")
+                
+                if username == WEB_USERNAME and password == WEB_PASSWORD:
+                    token = create_session(username)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Set-Cookie", f"web_session={token}; Path=/; HttpOnly; Max-Age={SESSION_DURATION_HOURS * 3600}")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True, "message": "Login successful"}).encode())
+                else:
+                    self.send_json_response({"error": "Invalid credentials"}, 401)
+            
+            elif path == "/api/logout":
+                token = self.get_session_token()
+                destroy_session(token)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Set-Cookie", "web_session=; Path=/; HttpOnly; Max-Age=0")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True}).encode())
+            
+            else:
+                self.send_json_response({"error": "Not found"}, 404)
     
     class ThreadedServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         allow_reuse_address = True
         
-    server = ThreadedServer(("0.0.0.0", HTTP_PORT), QuietHandler)
+    server = ThreadedServer(("0.0.0.0", HTTP_PORT), AuthHandler)
     logger.info(f"HTTP server running on http://localhost:{HTTP_PORT}")
     server.serve_forever()
 
@@ -427,19 +685,27 @@ async def main():
     """Main entry point."""
     print(f"""
 ╔══════════════════════════════════════════════════════════════════╗
-║              MCP Web Tester - WebSocket Hub                       ║
+║              MCP Web Tester - WebSocket Hub                      ║
 ╠══════════════════════════════════════════════════════════════════╣
-║                                                                   ║
-║  HTTP Server:       http://localhost:{HTTP_PORT:<5}                      ║
-║  WebSocket Hub:     ws://localhost:{WS_PORT:<5}                        ║
-║                                                                   ║
-║  Usage:                                                           ║
-║    1. Open http://localhost:{HTTP_PORT} in browser                      ║
-║    2. Connect MCP tool using mcp_pipe.py:                         ║
-║       MCP_ENDPOINT=ws://localhost:{WS_PORT}/mcp python3 mcp_pipe.py      ║
-║    3. Web UI will show "Connected" when tool joins                ║
-║                                                                   ║
-║  Press Ctrl+C to stop.                                            ║
+║                                                                  ║
+║  HTTP Server:       http://localhost:{HTTP_PORT:<5}              ║
+║  WebSocket Hub:     ws://localhost:{WS_PORT:<5}                  ║
+║                                                                  ║
+║  Authentication:                                                 ║
+║    Username: {WEB_USERNAME:<20}                             ║
+║    Password: {'*' * min(len(WEB_PASSWORD), 10):<20}                             ║
+║                                                                  ║
+║  Set WEB_USERNAME, WEB_PASSWORD in .env to change                ║
+║                                                                  ║
+║  Usage:                                                          ║
+║    1. Open http://localhost:{HTTP_PORT} in browser               ║
+║    2. Login with credentials above                               ║
+║    3. Add endpoint via CMS at http://localhost:8890              ║
+║    4. Endpoint local: ws://localhost:{WS_PORT}/mcp               ║
+║    5. Run MCP tools: python3 mcp_pipe.py                         ║
+║    6. Web UI will show "Connected" when tool joins               ║
+║                                                                  ║
+║  Press Ctrl+C to stop.                                           ║
 ╚══════════════════════════════════════════════════════════════════╝
     """)
     

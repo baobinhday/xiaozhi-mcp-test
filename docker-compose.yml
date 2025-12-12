@@ -9,19 +9,17 @@ services:
     ports:
       - "8888:8888" # Web UI
       - "8889:8889" # WebSocket Hub
+      - "8890:8890" # CMS Admin
     # Load environment from .env file if it exists (optional)
     env_file:
       - path: ./.env
         required: false
     environment:
-      # These will override values from .env file
-      # MCP endpoint URL for WebSocket connection
-      - MCP_ENDPOINT=${MCP_ENDPOINT:-ws://localhost:8889/mcp}
       # Path to MCP config file inside container
-      - MCP_CONFIG=${MCP_CONFIG:-/app/mcp_config.json}
-    # If you need to persist any data
-    # volumes:
-    #   - ./data:/app/data
+      - MCP_CONFIG=${MCP_CONFIG:-/app/data/mcp_config.json}
+    # Persist database
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 8888)); s.close()" ]

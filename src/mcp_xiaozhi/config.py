@@ -3,7 +3,7 @@
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from dotenv import load_dotenv
 
@@ -18,13 +18,42 @@ INITIAL_BACKOFF = 1  # Initial wait time in seconds
 MAX_BACKOFF = 600  # Maximum wait time in seconds
 
 
-def get_endpoint_url() -> Optional[str]:
-    """Get MCP endpoint URL from environment.
-
+def get_config_path() -> str:
+    """Get the path to the MCP config file.
+    
     Returns:
-        The endpoint URL or None if not set
+        Path to the config file
     """
-    return os.environ.get("MCP_ENDPOINT")
+    return os.environ.get("MCP_CONFIG") or os.path.join(os.getcwd(), "data", "mcp_config.json")
+
+
+def get_config_mtime() -> float:
+    """Get the modification time of the config file.
+    
+    Returns:
+        Modification time as float, or 0 if file doesn't exist
+    """
+    path = get_config_path()
+    if os.path.exists(path):
+        return os.path.getmtime(path)
+    return 0
+
+
+def get_all_endpoint_urls() -> list[dict]:
+    """Get all enabled MCP endpoint URLs from database.
+    
+    Returns:
+        List of endpoint dictionaries with 'name' and 'url' keys.
+    """
+    from .database import get_enabled_endpoints, init_db
+    
+    # Initialize database if needed
+    init_db()
+    
+    # Get endpoints from database
+    endpoints = get_enabled_endpoints()
+    
+    return [{"name": ep["name"], "url": ep["url"]} for ep in endpoints]
 
 
 def load_config() -> Dict[str, Any]:
@@ -33,7 +62,7 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Configuration dictionary or empty dict if not found/invalid
     """
-    path = os.environ.get("MCP_CONFIG") or os.path.join(os.getcwd(), "mcp_config.json")
+    path = os.environ.get("MCP_CONFIG") or os.path.join(os.getcwd(), "data", "mcp_config.json")
 
     if not os.path.exists(path):
         return {}
