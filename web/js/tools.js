@@ -188,7 +188,7 @@ function executeSelectedTool() {
   if (args === null) return;
 
   log('info', `Executing: ${tool.name}`);
-  displayRequest(args);
+  displayRequest(args, tool);
   showLoading(`Running ${tool.name}...`);
 
   sendRequest('tools/call', {
