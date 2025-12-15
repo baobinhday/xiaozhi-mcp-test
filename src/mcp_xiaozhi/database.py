@@ -283,6 +283,12 @@ def update_endpoint(
         if enabled is not None:
             updates.append("enabled = ?")
             params.append(1 if enabled else 0)
+            # When disabling an endpoint, reset connection status to 'disconnected'
+            if not enabled:
+                updates.append("connection_status = ?")
+                params.append("disconnected")
+                updates.append("connection_error = ?")
+                params.append(None)
         
         if updates:
             updates.append("updated_at = ?")

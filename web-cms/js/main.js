@@ -49,7 +49,8 @@ document.addEventListener('click', async (e) => {
 
   if (target.classList.contains('btn-toggle-endpoint')) {
     const id = parseInt(target.dataset.endpointId);
-    const enabled = target.dataset.enabled === 'true';
+    // data-enabled stores 1 or 0 (number), not 'true' or 'false'
+    const enabled = target.dataset.enabled === '1';
     if (await updateEndpoint(id, { enabled: enabled ? 0 : 1 })) {
       await fetchEndpoints();
     }

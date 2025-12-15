@@ -7,62 +7,57 @@
 // Connection Handler
 // ============================================
 function initConnectionHandler() {
-  // Fetch endpoints on init
-  fetchEndpoints();
+  // Single toggle button handler
+  elements.connectionToggleBtn.addEventListener('click', toggleConnection);
 
-  // Connect/disconnect on select change
-  elements.wsEndpoint.addEventListener('change', () => {
-    const endpoint = elements.wsEndpoint.value;
-    if (endpoint) {
-      connect();
-    } else {
-      disconnect();
-    }
-  });
-
-  // Refresh button handler
-  elements.refreshEndpointsBtn.addEventListener('click', fetchEndpoints);
+  // Copy endpoint button handler
+  elements.copyEndpointBtn.addEventListener('click', copyEndpointUrl);
 }
 
-async function fetchEndpoints() {
+/**
+ * Toggle connection state
+ */
+function toggleConnection() {
+  if (state.isConnected) {
+    disconnect();
+  } else {
+    connect();
+  }
+}
+
+/**
+ * Copy WebSocket endpoint URL to clipboard
+ */
+async function copyEndpointUrl() {
+  const wsUrl = buildWebSocketUrl() + '/mcp';
   try {
-    log('info', 'Fetching endpoints...');
-    const response = await fetch('/api/endpoints', {
-      credentials: 'include'
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data = await response.json();
-    populateEndpointSelect(data.endpoints || []);
-    log('success', `Found ${data.endpoints?.length || 0} endpoint(s)`);
-  } catch (error) {
-    log('error', `Failed to fetch endpoints: ${error.message}`);
+    await navigator.clipboard.writeText(wsUrl);
+    // Show feedback
+    const btn = elements.copyEndpointBtn;
+    const iconEl = btn.querySelector('.btn-icon');
+    const originalIcon = iconEl.textContent;
+    iconEl.textContent = '✓';
+    setTimeout(() => {
+      iconEl.textContent = originalIcon;
+    }, 2000);
+    log('success', `Copied endpoint: ${wsUrl}`);
+  } catch (err) {
+    log('error', `Failed to copy: ${err.message}`);
   }
 }
 
-function populateEndpointSelect(endpoints) {
-  const select = elements.wsEndpoint;
-  const currentValue = select.value;
-
-  // Clear and add default option
-  select.innerHTML = '<option value="">Select an endpoint...</option>';
-
-  // Add endpoint options
-  endpoints.forEach(ep => {
-    const option = document.createElement('option');
-    option.value = ep.url;
-    option.textContent = ep.name;
-    select.appendChild(option);
-  });
-
-  // Restore previous selection if still valid
-  if (currentValue) {
-    const exists = Array.from(select.options).some(opt => opt.value === currentValue);
-    if (exists) {
-      select.value = currentValue;
-    }
-  }
+/**
+ * Build WebSocket URL from current page host
+ * @returns {string} WebSocket URL
+ */
+function buildWebSocketUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.hostname;
+  // Use same port scheme: if HTTP is 8888, WS is 8889
+  // We can derive this or use a fixed difference
+  const httpPort = parseInt(window.location.port) || (window.location.protocol === 'https:' ? 443 : 80);
+  const wsPort = httpPort === 8888 ? 8889 : httpPort + 1;
+  return `${protocol}//${host}:${wsPort}`;
 }
 
 /**
@@ -79,48 +74,26 @@ function getSessionToken() {
 }
 
 function connect() {
-  let endpoint = elements.wsEndpoint.value.trim();
-
-  if (!endpoint) {
-    log('error', 'Please select an endpoint');
-    return;
-  }
-
-  // Strip /mcp suffix if present - browser connects to hub root, not MCP tool path
-  endpoint = endpoint.replace(/\/mcp\/?(\\?.*)?$/, '$1');
-
-  // Upgrade protocol if page is loaded via HTTPS
-  if (window.location.protocol === 'https:' && endpoint.startsWith('ws://')) {
-    endpoint = endpoint.replace('ws://', 'wss://');
-    log('info', 'Upgraded WebSocket protocol to WSS (Secure)');
-  }
-
-  // If endpoint is localhost, replace with current window hostname
-  // This allows connecting to the server when accessing from a different device
-  if (endpoint.includes('//localhost') || endpoint.includes('//127.0.0.1')) {
-    const hostname = window.location.hostname;
-    // Don't replace if we're actually on localhost
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      endpoint = endpoint.replace('//localhost', `//${hostname}`).replace('//127.0.0.1', `//${hostname}`);
-      log('info', `Adjusted endpoint to: ${endpoint}`);
-    }
-  }
+  // Build WebSocket URL from current host
+  let endpoint = buildWebSocketUrl();
 
   // Add session token for authentication
   const sessionToken = getSessionToken();
   if (sessionToken) {
-    const separator = endpoint.includes('?') ? '&' : '?';
-    endpoint = `${endpoint}${separator}token=${sessionToken}`;
+    endpoint = `${endpoint}?token=${sessionToken}`;
   }
 
   try {
     log('info', `Connecting to ${endpoint.split('?')[0]}...`);
     state.websocket = new WebSocket(endpoint);
 
+    // Update toggle button to show "Disconnect"
+    updateToggleButton(true);
+
     state.websocket.onopen = () => {
       state.isConnected = true;
       updateConnectionUI('waiting');
-      log('success', 'Connected to hub! Waiting for MCP tool...');
+      log('success', 'Connected to hub! Waiting for MCP servers...');
     };
 
     state.websocket.onclose = (event) => {
@@ -153,6 +126,8 @@ function disconnect() {
   state.tools = [];
   updateConnectionUI(false);
   showNoToolsMessage();
+  // Reset toggle button to show "Connect"
+  updateToggleButton(false);
   log('info', 'Disconnected');
 }
 
@@ -179,5 +154,27 @@ function updateConnectionUI(status) {
     state.mcpServers = [];
     dotEl.classList.remove('bg-green-500');
     dotEl.classList.add('bg-red-500');
+  }
+}
+
+/**
+ * Update toggle button text and style based on connection state
+ * @param {boolean} isConnected - Whether currently connected
+ */
+function updateToggleButton(isConnected) {
+  const btn = elements.connectionToggleBtn;
+  const iconEl = btn.querySelector('.btn-icon');
+  const textEl = btn.querySelector('.btn-text');
+
+  if (isConnected) {
+    iconEl.textContent = '⛓️‍💥';
+    textEl.textContent = 'Disconnect';
+    btn.classList.remove('from-indigo-500', 'to-violet-500', 'hover:shadow-indigo-500/20');
+    btn.classList.add('bg-[#1c1c26]', 'text-zinc-400', 'border', 'border-white/10', 'hover:bg-red-500/20', 'hover:text-red-400');
+  } else {
+    iconEl.textContent = '🔗';
+    textEl.textContent = 'Connect';
+    btn.classList.remove('bg-[#1c1c26]', 'text-zinc-400', 'border', 'border-white/10', 'hover:bg-red-500/20', 'hover:text-red-400');
+    btn.classList.add('from-indigo-500', 'to-violet-500', 'hover:shadow-indigo-500/20');
   }
 }

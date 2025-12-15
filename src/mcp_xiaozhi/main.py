@@ -152,11 +152,46 @@ async def _run_servers(target_arg: Optional[str]) -> None:
         endpoints = get_all_endpoint_urls()
         
         if not endpoints:
+            # Cancel all running tasks for removed endpoints
+            if running_tasks:
+                logger.info("🛑 All endpoints disabled/removed, stopping connections...")
+                for task_key, task in list(running_tasks.items()):
+                    task.cancel()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
+                running_tasks.clear()
+                known_endpoints.clear()
+            
             # Wait for endpoints to be added
             endpoints = await _wait_for_endpoints()
         
         # Build current endpoint map
         current_endpoints = {ep["name"]: ep["url"] for ep in endpoints}
+        
+        # Find and cancel tasks for removed/disabled endpoints
+        removed_endpoints = set(known_endpoints.keys()) - set(current_endpoints.keys())
+        for endpoint_name in removed_endpoints:
+            logger.info(f"🛑 Endpoint disabled/removed: {endpoint_name}")
+            
+            # Cancel all tasks for this endpoint
+            tasks_to_cancel = []
+            for task_key in list(running_tasks.keys()):
+                if task_key.startswith(f"{endpoint_name}:"):
+                    tasks_to_cancel.append(task_key)
+            
+            for task_key in tasks_to_cancel:
+                task = running_tasks[task_key]
+                logger.info(f"🛑 Stopping: {task_key}")
+                task.cancel()
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+                del running_tasks[task_key]
+            
+            del known_endpoints[endpoint_name]
         
         # Find new endpoints or endpoints that need server updates
         for endpoint in endpoints:

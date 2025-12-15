@@ -86,15 +86,16 @@
                 </div>
 
                 <div class="connection-panel flex items-center gap-4 flex-wrap w-full lg:w-auto flex-col sm:flex-row">
-                    <div class="connection-input-group flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
-                        <select id="ws-endpoint"
-                            class="input w-full sm:w-80 px-4 py-2.5 bg-[#1c1c26] border border-white/10 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-indigo-500/50 focus:shadow-[0_0_20px_rgba(99,102,241,0.2)] transition-all cursor-pointer">
-                            <option value="">Select an endpoint...</option>
-                        </select>
-                        <button id="refresh-endpoints-btn"
+                    <div class="flex gap-2">
+                        <button id="connection-toggle-btn"
+                            class="btn inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-lg font-medium text-sm hover:shadow-lg hover:shadow-indigo-500/20 transition-all cursor-pointer border-0">
+                            <span class="btn-icon">🔗</span>
+                            <span class="btn-text">Connect</span>
+                        </button>
+                        <button id="copy-endpoint-btn"
                             class="btn inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1c1c26] text-zinc-400 border border-white/10 rounded-lg font-medium text-sm hover:bg-[#272732] hover:text-zinc-200 transition-all cursor-pointer"
-                            title="Refresh endpoints">
-                            🔄
+                            title="Copy WebSocket endpoint URL">
+                            <span class="btn-icon">📋</span>
                         </button>
                     </div>
                     <div class="connection-status flex items-center gap-2 px-4 py-2.5 bg-[#1c1c26] rounded-lg text-sm"

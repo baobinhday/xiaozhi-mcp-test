@@ -57,9 +57,6 @@ WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin1asdasdfsdafdsg$####43dgsdg2
 WEB_SECRET_KEY = os.environ.get("WEB_SECRET_KEY", secrets.token_hex(32))
 SESSION_DURATION_HOURS = 24
 
-# WebSocket authentication token for MCP servers
-MCP_WS_TOKEN = os.environ.get("MCP_WS_TOKEN", "")
-
 # In-memory session storage
 sessions = {}
 
@@ -532,14 +529,6 @@ async def handle_connection(websocket, path):
         client_type = "mcp"
     
     if client_type == "mcp":
-        # Validate MCP token if configured
-        if MCP_WS_TOKEN:
-            provided_token = params.get("token", "")
-            if provided_token != MCP_WS_TOKEN:
-                logger.warning(f"MCP connection rejected: invalid token from {websocket.remote_address}")
-                await websocket.close(1008, "Invalid MCP token")
-                return
-        
         server_name = params.get("server", "unknown")
         await hub.register_mcp(websocket, server_name)
         
@@ -558,12 +547,8 @@ async def handle_connection(websocket, path):
     else:  # Default to browser client
         client_type = "browser"
         
-        # Validate session token for browser clients
-        session_token = params.get("token", "")
-        if not validate_session(session_token):
-            logger.warning(f"Browser connection rejected: invalid session from {websocket.remote_address}")
-            await websocket.close(1008, "Authentication required")
-            return
+        # No authentication required for WebSocket browser clients
+        # (matches Xiaozhi model where ESP32 agent connects directly to Broker)
         
         await hub.register_browser(websocket)
         

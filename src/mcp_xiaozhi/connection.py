@@ -92,11 +92,6 @@ async def connect_to_server(uri: str, target: str, endpoint_id: Optional[int] = 
             if "?" not in uri
             else f"{uri}&server={target}"
         )
-        
-        # Add MCP authentication token if configured
-        mcp_ws_token = os.environ.get("MCP_WS_TOKEN", "")
-        if mcp_ws_token:
-            ws_uri = f"{ws_uri}&token={mcp_ws_token}"
 
         async with websockets.connect(ws_uri) as websocket:
             logger.info(f"[{target}] Successfully connected to WebSocket server")

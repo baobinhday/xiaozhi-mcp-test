@@ -58,14 +58,7 @@
 All security fixes have been implemented:
 
 1. **Rate Limiting**: Login attempts are now limited to 5 per minute per IP with exponential backoff
-2. **WebSocket Auth**: Browser connections require valid session token
-3. **MCP Auth**: MCP server connections can require `MCP_WS_TOKEN` (optional for backward compatibility)
-4. **Cookie Flags**: Added `Secure` and `SameSite=Strict` flags
-
-### New Environment Variable
-```bash
-# Set in .env to enable MCP server authentication
-MCP_WS_TOKEN=your-secure-token-here
-```
+2. **WebSocket Auth**: Browser connections are handled by Hub
+3. **Cookie Flags**: Added `Secure` and `SameSite=Strict` flags
 
 > **Note**: Servers need to be restarted for changes to take effect.
