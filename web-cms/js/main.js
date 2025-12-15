@@ -14,6 +14,7 @@ window.appState = {
   deleteTargetId: null,
   deleteMcpServerName: null,
   toolsServerFilter: '',
+  toolsStatusFilter: '',
   statusPollingInterval: null,
 
   // DOM Elements (will be initialized on DOMContentLoaded)
@@ -158,6 +159,17 @@ function setupEventListeners() {
   if (toolsServerFilterEl) {
     toolsServerFilterEl.addEventListener('change', (e) => {
       window.appState.toolsServerFilter = e.target.value;
+      if (typeof renderMcpTools === 'function') {
+        renderMcpTools();
+      }
+    });
+  }
+
+  // Tools status filter (enabled/disabled)
+  const toolsStatusFilterEl = document.getElementById('tools-status-filter');
+  if (toolsStatusFilterEl) {
+    toolsStatusFilterEl.addEventListener('change', (e) => {
+      window.appState.toolsStatusFilter = e.target.value;
       if (typeof renderMcpTools === 'function') {
         renderMcpTools();
       }

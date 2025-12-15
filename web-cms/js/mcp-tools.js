@@ -162,9 +162,24 @@ function renderMcpTools() {
 
   let filteredTools = window.appState.mcpTools;
 
+  // Apply server filter
   if (window.appState.toolsServerFilter) {
-    filteredTools = window.appState.mcpTools.filter(tool => {
+    filteredTools = filteredTools.filter(tool => {
       return tool.serverName === window.appState.toolsServerFilter;
+    });
+  }
+
+  // Apply status filter (enabled/disabled)
+  if (window.appState.toolsStatusFilter) {
+    filteredTools = filteredTools.filter(tool => {
+      const serverName = tool.serverName || 'unknown';
+      const isDisabled = window.appState.disabledTools[serverName]?.includes(tool.name) || false;
+      if (window.appState.toolsStatusFilter === 'enabled') {
+        return !isDisabled;
+      } else if (window.appState.toolsStatusFilter === 'disabled') {
+        return isDisabled;
+      }
+      return true;
     });
   }
 
