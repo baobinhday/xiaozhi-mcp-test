@@ -36,8 +36,15 @@ async def _run_server_for_endpoint(endpoint_url: str, endpoint_name: str, server
         endpoint_name: Name of the endpoint (for logging)
         server: Server name to run
     """
+    from .database import get_endpoint_by_name
+    
     logger.info(f"[{endpoint_name}] Starting server '{server}' -> {endpoint_url}")
-    await connect_with_retry(endpoint_url, server)
+    
+    # Look up endpoint ID for status tracking
+    endpoint = get_endpoint_by_name(endpoint_name)
+    endpoint_id = endpoint["id"] if endpoint else None
+    
+    await connect_with_retry(endpoint_url, server, endpoint_id)
 
 
 async def _wait_for_endpoints() -> list[dict]:

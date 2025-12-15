@@ -58,6 +58,11 @@ SESSION_DURATION_HOURS = 24
 # In-memory session storage (simple implementation)
 sessions = {}
 
+# Rate limiting storage
+login_attempts = {}  # Dict: ip -> {"count": int, "first_attempt": datetime, "last_failed": datetime}
+MAX_LOGIN_ATTEMPTS = 3
+RATE_LIMIT_WINDOW = 60  # seconds
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -130,6 +135,54 @@ def destroy_session(token: str) -> bool:
         del sessions[token]
         return True
     return False
+
+
+def get_client_ip(handler) -> str:
+    """Get client IP from request."""
+    # Check for forwarded header first (behind proxy)
+    forwarded = handler.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return handler.client_address[0]
+
+
+def check_rate_limit(ip: str) -> tuple:
+    """Check if IP is rate limited. Returns (allowed, wait_seconds)."""
+    if ip not in login_attempts:
+        return True, 0
+    
+    attempt = login_attempts[ip]
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(seconds=RATE_LIMIT_WINDOW)
+    
+    # Reset if outside window
+    if attempt["first_attempt"] < window_start:
+        del login_attempts[ip]
+        return True, 0
+    
+    # Check attempt count
+    if attempt["count"] >= MAX_LOGIN_ATTEMPTS:
+        # Exponential backoff: 2^(attempts - MAX) seconds, max 5 minutes
+        backoff = min(2 ** (attempt["count"] - MAX_LOGIN_ATTEMPTS + 1), 300)
+        wait_until = attempt["last_failed"] + timedelta(seconds=backoff)
+        if now < wait_until:
+            return False, int((wait_until - now).total_seconds()) + 1
+    
+    return True, 0
+
+
+def record_login_attempt(ip: str, success: bool):
+    """Record a login attempt."""
+    now = datetime.now(timezone.utc)
+    if success:
+        # Clear on successful login
+        login_attempts.pop(ip, None)
+    else:
+        if ip not in login_attempts:
+            login_attempts[ip] = {"count": 0, "first_attempt": now, "last_failed": now}
+        login_attempts[ip]["count"] += 1
+        login_attempts[ip]["last_failed"] = now
+        logger.warning(f"Failed login attempt from {ip} (count: {login_attempts[ip]['count']})")
 
 
 class CMSHandler(SimpleHTTPRequestHandler):
@@ -319,18 +372,30 @@ class CMSHandler(SimpleHTTPRequestHandler):
         path = parsed.path
         
         if path == "/api/login":
+            # Rate limiting check
+            client_ip = get_client_ip(self)
+            allowed, wait_seconds = check_rate_limit(client_ip)
+            if not allowed:
+                logger.warning(f"Rate limited login attempt from {client_ip}")
+                self.send_json_response({
+                    "error": f"Too many login attempts. Please wait {wait_seconds} seconds."
+                }, 429)
+                return
+            
             body = self.read_body()
             username = body.get("username", "")
             password = body.get("password", "")
             
             if username == CMS_USERNAME and password == CMS_PASSWORD:
+                record_login_attempt(client_ip, True)
                 token = create_session(username)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
-                self.send_header("Set-Cookie", f"session={token}; Path=/; HttpOnly; Max-Age={SESSION_DURATION_HOURS * 3600}")
+                self.send_header("Set-Cookie", f"session={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_DURATION_HOURS * 3600}")
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": True, "message": "Login successful"}).encode())
             else:
+                record_login_attempt(client_ip, False)
                 self.send_json_response({"error": "Invalid credentials"}, 401)
         
         elif path == "/api/logout":
@@ -338,7 +403,7 @@ class CMSHandler(SimpleHTTPRequestHandler):
             destroy_session(token)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Set-Cookie", "session=; Path=/; HttpOnly; Max-Age=0")
+            self.send_header("Set-Cookie", "session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0")
             self.end_headers()
             self.wfile.write(json.dumps({"success": True}).encode())
         

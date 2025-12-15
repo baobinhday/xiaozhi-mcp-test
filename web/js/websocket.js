@@ -65,6 +65,19 @@ function populateEndpointSelect(endpoints) {
   }
 }
 
+/**
+ * Get session token from cookies
+ * @returns {string} Session token or empty string
+ */
+function getSessionToken() {
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=');
+    if (name === 'web_session') return value;
+  }
+  return '';
+}
+
 function connect() {
   let endpoint = elements.wsEndpoint.value.trim();
 
@@ -74,7 +87,7 @@ function connect() {
   }
 
   // Strip /mcp suffix if present - browser connects to hub root, not MCP tool path
-  endpoint = endpoint.replace(/\/mcp\/?(\?.*)?$/, '$1');
+  endpoint = endpoint.replace(/\/mcp\/?(\\?.*)?$/, '$1');
 
   // Upgrade protocol if page is loaded via HTTPS
   if (window.location.protocol === 'https:' && endpoint.startsWith('ws://')) {
@@ -93,8 +106,15 @@ function connect() {
     }
   }
 
+  // Add session token for authentication
+  const sessionToken = getSessionToken();
+  if (sessionToken) {
+    const separator = endpoint.includes('?') ? '&' : '?';
+    endpoint = `${endpoint}${separator}token=${sessionToken}`;
+  }
+
   try {
-    log('info', `Connecting to ${endpoint}...`);
+    log('info', `Connecting to ${endpoint.split('?')[0]}...`);
     state.websocket = new WebSocket(endpoint);
 
     state.websocket.onopen = () => {

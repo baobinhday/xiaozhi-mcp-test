@@ -57,8 +57,16 @@ WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin1asdasdfsdafdsg$####43dgsdg2
 WEB_SECRET_KEY = os.environ.get("WEB_SECRET_KEY", secrets.token_hex(32))
 SESSION_DURATION_HOURS = 24
 
+# WebSocket authentication token for MCP servers
+MCP_WS_TOKEN = os.environ.get("MCP_WS_TOKEN", "")
+
 # In-memory session storage
 sessions = {}
+
+# Rate limiting storage
+login_attempts = {}  # Dict: ip -> {"count": int, "first_attempt": datetime, "last_failed": datetime}
+MAX_LOGIN_ATTEMPTS = 3
+RATE_LIMIT_WINDOW = 60  # seconds
 
 
 def generate_session_token() -> str:
@@ -97,6 +105,54 @@ def destroy_session(token: str) -> bool:
         del sessions[token]
         return True
     return False
+
+
+def get_client_ip(handler) -> str:
+    """Get client IP from request."""
+    # Check for forwarded header first (behind proxy)
+    forwarded = handler.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return handler.client_address[0]
+
+
+def check_rate_limit(ip: str) -> tuple:
+    """Check if IP is rate limited. Returns (allowed, wait_seconds)."""
+    if ip not in login_attempts:
+        return True, 0
+    
+    attempt = login_attempts[ip]
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(seconds=RATE_LIMIT_WINDOW)
+    
+    # Reset if outside window
+    if attempt["first_attempt"] < window_start:
+        del login_attempts[ip]
+        return True, 0
+    
+    # Check attempt count
+    if attempt["count"] >= MAX_LOGIN_ATTEMPTS:
+        # Exponential backoff: 2^(attempts - MAX) seconds, max 5 minutes
+        backoff = min(2 ** (attempt["count"] - MAX_LOGIN_ATTEMPTS + 1), 300)
+        wait_until = attempt["last_failed"] + timedelta(seconds=backoff)
+        if now < wait_until:
+            return False, int((wait_until - now).total_seconds()) + 1
+    
+    return True, 0
+
+
+def record_login_attempt(ip: str, success: bool):
+    """Record a login attempt."""
+    now = datetime.now(timezone.utc)
+    if success:
+        # Clear on successful login
+        login_attempts.pop(ip, None)
+    else:
+        if ip not in login_attempts:
+            login_attempts[ip] = {"count": 0, "first_attempt": now, "last_failed": now}
+        login_attempts[ip]["count"] += 1
+        login_attempts[ip]["last_failed"] = now
+        logger.warning(f"Failed login attempt from {ip} (count: {login_attempts[ip]['count']})")
 
 
 class WebSocketHub:
@@ -454,24 +510,37 @@ hub = WebSocketHub()
 
 async def handle_connection(websocket, path):
     """Handle incoming WebSocket connections."""
-    # Determine client type from path or first message
+    # Extract query parameters
+    params = {}
+    if "?" in path:
+        try:
+            params = dict(p.split("=") for p in path.split("?")[1].split("&") if "=" in p)
+        except ValueError:
+            pass
+    
+    # Determine client type from path
     # /browser = browser client
     # /mcp = MCP tool
     
     client_type = None
+    base_path = path.split("?")[0]
     
-    if path == "/mcp" or path.startswith("/mcp"):
+    if base_path == "/mcp" or base_path.startswith("/mcp"):
         client_type = "mcp"
-    elif "?" in path and "server=" in path:
-         # Fallback: Check if it's an MCP tool via query param even if path is wrong
+    elif "server" in params:
+        # Fallback: Check if it's an MCP tool via query param
         client_type = "mcp"
     
     if client_type == "mcp":
-        # Extract server name from query string
-        server_name = "unknown"
-        if "?" in path:
-            params = dict(p.split("=") for p in path.split("?")[1].split("&") if "=" in p)
-            server_name = params.get("server", "unknown")
+        # Validate MCP token if configured
+        if MCP_WS_TOKEN:
+            provided_token = params.get("token", "")
+            if provided_token != MCP_WS_TOKEN:
+                logger.warning(f"MCP connection rejected: invalid token from {websocket.remote_address}")
+                await websocket.close(1008, "Invalid MCP token")
+                return
+        
+        server_name = params.get("server", "unknown")
         await hub.register_mcp(websocket, server_name)
         
         try:
@@ -488,6 +557,14 @@ async def handle_connection(websocket, path):
             
     else:  # Default to browser client
         client_type = "browser"
+        
+        # Validate session token for browser clients
+        session_token = params.get("token", "")
+        if not validate_session(session_token):
+            logger.warning(f"Browser connection rejected: invalid session from {websocket.remote_address}")
+            await websocket.close(1008, "Authentication required")
+            return
+        
         await hub.register_browser(websocket)
         
         try:
@@ -645,19 +722,31 @@ def run_http_server():
             path = parsed.path
             
             if path == "/api/login":
+                # Rate limiting check
+                client_ip = get_client_ip(self)
+                allowed, wait_seconds = check_rate_limit(client_ip)
+                if not allowed:
+                    logger.warning(f"Rate limited login attempt from {client_ip}")
+                    self.send_json_response({
+                        "error": f"Too many login attempts. Please wait {wait_seconds} seconds."
+                    }, 429)
+                    return
+                
                 body = self.read_body()
                 username = body.get("username", "")
                 password = body.get("password", "")
                 
                 if username == WEB_USERNAME and password == WEB_PASSWORD:
+                    record_login_attempt(client_ip, True)
                     token = create_session(username)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
-                    self.send_header("Set-Cookie", f"web_session={token}; Path=/; HttpOnly; Max-Age={SESSION_DURATION_HOURS * 3600}")
+                    self.send_header("Set-Cookie", f"web_session={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_DURATION_HOURS * 3600}")
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
                     self.wfile.write(json.dumps({"success": True, "message": "Login successful"}).encode())
                 else:
+                    record_login_attempt(client_ip, False)
                     self.send_json_response({"error": "Invalid credentials"}, 401)
             
             elif path == "/api/logout":
@@ -665,7 +754,7 @@ def run_http_server():
                 destroy_session(token)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
-                self.send_header("Set-Cookie", "web_session=; Path=/; HttpOnly; Max-Age=0")
+                self.send_header("Set-Cookie", "web_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": True}).encode())

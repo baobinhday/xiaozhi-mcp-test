@@ -342,6 +342,8 @@
     let disabledTools = {};  // {serverName: [toolName, ...]}
     let customTools = {};  // {serverName: {toolName: {name, description}}}
     let toolsServerFilter = '';  // Filter by server name
+    let statusPollingInterval = null;  // Interval for polling endpoint status
+
 
     // DOM Elements
     const loginView = document.getElementById('login-view');
@@ -786,10 +788,16 @@
       endpointsList.classList.remove('hidden');
       emptyState.classList.add('hidden');
 
-      endpointsList.innerHTML = endpoints.map(endpoint => `
+      endpointsList.innerHTML = endpoints.map(endpoint => {
+        const connectionStatus = endpoint.connection_status || 'disconnected';
+        const lastConnected = endpoint.last_connected_at ? formatDate(endpoint.last_connected_at) : 'Never';
+        const errorMsg = endpoint.connection_error || '';
+        const statusTitle = connectionStatus === 'error' ? `Error: ${errorMsg}` : connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1);
+        console.log(connectionStatus)
+        return `
                 <div class="endpoint-card ${endpoint.enabled ? '' : 'disabled'}">
-                    <div class="endpoint-status">
-                        <span class="status-dot ${endpoint.enabled ? 'active' : 'inactive'}"></span>
+                    <div class="endpoint-status" title="${escapeHtml(statusTitle)}">
+                        <span class="status-dot ${connectionStatus}"></span>
                     </div>
                     <div class="endpoint-info">
                         <h3 class="endpoint-name">${escapeHtml(endpoint.name)}</h3>
@@ -803,7 +811,7 @@
                             </button>
                         </div>
                         <p class="endpoint-meta">
-                            Created: ${formatDate(endpoint.created_at)}
+                            Status: ${statusTitle} • Last connected: ${lastConnected}
                         </p>
                     </div>
                     <div class="endpoint-actions">
@@ -814,7 +822,8 @@
                         <button class="btn btn-sm btn-delete" onclick="confirmDelete(${endpoint.id}, '${escapeHtml(endpoint.name)}')">Delete</button>
                     </div>
                 </div>
-            `).join('');
+            `;
+      }).join('');
     }
 
     function maskUrl(url) {
@@ -855,7 +864,30 @@
       return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     }
 
+    // Status Polling
+    function startStatusPolling() {
+      // Clear any existing interval
+      if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+      }
+
+      // Poll every 5 seconds
+      statusPollingInterval = setInterval(async () => {
+        if (currentTab === 'endpoints') {
+          await fetchEndpoints();
+        }
+      }, 5000);
+    }
+
+    function stopStatusPolling() {
+      if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+        statusPollingInterval = null;
+      }
+    }
+
     // Tab Switching
+
     function switchTab(tab) {
       currentTab = tab;
       document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -880,6 +912,13 @@
         addEndpointBtn.parentNode.insertBefore(addMcpBtn, addEndpointBtn);
       }
       addMcpBtn.style.display = tab === 'mcp-servers' ? '' : 'none';
+
+      // Manage status polling for endpoints tab
+      if (tab === 'endpoints') {
+        startStatusPolling();
+      } else {
+        stopStatusPolling();
+      }
 
       // Load tools when switching to MCP Tools tab
       if (tab === 'mcp-tools') {
@@ -941,7 +980,7 @@
               <button class="btn btn-sm btn-delete" onclick="confirmMcpDelete('${escapeHtml(server.name)}')">Delete</button>
             </div>
           </div>
-        `;
+          `;
       }).join('');
     }
 
@@ -1038,15 +1077,19 @@
         showView(dashboardView);
         await fetchEndpoints();
         await fetchMcpServers();
+        // Start status polling since we default to endpoints tab
+        startStatusPolling();
       } else {
         loginError.textContent = 'Invalid username or password';
       }
     });
 
     logoutBtn.addEventListener('click', async () => {
+      stopStatusPolling();
       await logout();
       showView(loginView);
     });
+
 
     addEndpointBtn.addEventListener('click', () => {
       showModal('Add Endpoint');

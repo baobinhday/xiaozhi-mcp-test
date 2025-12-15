@@ -72,8 +72,8 @@ The system consists of three independent components with **clear separation of c
                     │                     Port 8890                                │
                     └──────────────────────────────────────────────────────────────┘
                                                     ▲
-                                                    │ (NO connection)
-                                                    ✗
+                                                    │ 
+                                                    ▼
                                                     
                     ┌──────────────────────────────────────────────────────────────┐
                     │                                                              │
