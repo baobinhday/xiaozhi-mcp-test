@@ -110,12 +110,12 @@ function startStatusPolling() {
     clearInterval(window.appState.statusPollingInterval);
   }
 
-  // Poll every 5 seconds
+  // Poll every 30 seconds
   window.appState.statusPollingInterval = setInterval(async () => {
     if (window.appState.currentTab === 'endpoints') {
       await fetchEndpoints();
     }
-  }, 5000);
+  }, 30000);
 }
 
 function stopStatusPolling() {

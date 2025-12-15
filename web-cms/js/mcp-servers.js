@@ -98,15 +98,15 @@ function showMcpServerModal(title = 'Add MCP Server', server = null) {
   document.getElementById('mcp-server-name').value = server?.name || '';
   document.getElementById('mcp-server-type').value = server?.type || 'stdio';
   document.getElementById('mcp-server-command').value = server?.command || '';
-  document.getElementById('mcp-server-args').value = server?.args?.join('\\n') || '';
+  document.getElementById('mcp-server-args').value = server?.args?.join('\n') || '';
   document.getElementById('mcp-server-url').value = server?.url || '';
 
   // Convert env object to KEY=VALUE format
-  const envStr = server?.env ? Object.entries(server.env).map(([k, v]) => `${k}=${v}`).join('\\n') : '';
+  const envStr = server?.env ? Object.entries(server.env).map(([k, v]) => `${k}=${v}`).join('\n') : '';
   document.getElementById('mcp-server-env').value = envStr;
 
   // Convert headers object to KEY=VALUE format
-  const headersStr = server?.headers ? Object.entries(server.headers).map(([k, v]) => `${k}=${v}`).join('\\n') : '';
+  const headersStr = server?.headers ? Object.entries(server.headers).map(([k, v]) => `${k}=${v}`).join('\n') : '';
   document.getElementById('mcp-server-headers').value = headersStr;
 
   document.getElementById('mcp-server-enabled').checked = !server?.disabled;

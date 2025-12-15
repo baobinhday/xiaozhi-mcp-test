@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import secrets
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -98,6 +99,192 @@ def save_mcp_config(config: dict) -> bool:
     except Exception as e:
         logger.error(f"Error saving mcp_config.json: {e}")
         return False
+
+
+def discover_tools_for_server(server_name: str, server_config: dict) -> list:
+    """Start MCP server process temporarily, query tools via stdio, and cache them.
+    
+    This allows the CMS to discover tools immediately when a server is added,
+    without requiring an endpoint connection.
+    
+    Args:
+        server_name: Name of the MCP server
+        server_config: Server configuration dict from mcp_config.json
+        
+    Returns:
+        List of tools discovered, or empty list on failure
+    """
+    # Skip if disabled
+    if server_config.get("disabled"):
+        logger.info(f"[{server_name}] Skipping tool discovery - server is disabled")
+        return []
+    
+    server_type = server_config.get("type", "stdio")
+    
+    # Build command based on server type
+    try:
+        if server_type == "stdio":
+            command = server_config.get("command")
+            args = server_config.get("args", [])
+            if not command:
+                logger.error(f"[{server_name}] Missing 'command' in config")
+                return []
+            cmd = [command] + args
+        elif server_type in ("http", "sse", "streamablehttp"):
+            url = server_config.get("url")
+            if not url:
+                logger.error(f"[{server_name}] Missing 'url' for HTTP type server")
+                return []
+            # Use mcp-proxy for HTTP servers
+            cmd = [sys.executable, "-m", "mcp_proxy"]
+            if server_type in ("http", "streamablehttp"):
+                cmd += ["--transport", "streamablehttp"]
+            headers = server_config.get("headers", {})
+            for hk, hv in headers.items():
+                cmd += ["-H", hk, str(hv)]
+            cmd.append(url)
+        else:
+            logger.error(f"[{server_name}] Unsupported server type: {server_type}")
+            return []
+    except Exception as e:
+        logger.error(f"[{server_name}] Error building command: {e}")
+        return []
+    
+    # Build environment
+    child_env = os.environ.copy()
+    for k, v in server_config.get("env", {}).items():
+        child_env[str(k)] = str(v)
+    
+    process = None
+    tools = []
+    
+    try:
+        logger.info(f"[{server_name}] Starting process for tool discovery: {' '.join(cmd)}")
+        process = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+            text=True,
+            env=child_env,
+        )
+        
+        # Send initialize request
+        init_request = {
+            "jsonrpc": "2.0",
+            "id": "cms_init",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "MCP CMS Tool Discovery",
+                    "version": "1.0.0"
+                }
+            }
+        }
+        process.stdin.write(json.dumps(init_request) + "\n")
+        process.stdin.flush()
+        
+        # Read initialize response (with timeout via select/poll would be ideal, but simple readline for now)
+        init_response_line = process.stdout.readline()
+        if not init_response_line:
+            logger.error(f"[{server_name}] No response to initialize request")
+            return []
+        
+        try:
+            init_response = json.loads(init_response_line)
+            if "error" in init_response:
+                logger.error(f"[{server_name}] Initialize error: {init_response['error']}")
+                return []
+            logger.info(f"[{server_name}] Initialize successful")
+        except json.JSONDecodeError:
+            logger.error(f"[{server_name}] Invalid JSON in initialize response")
+            return []
+        
+        # Send tools/list request
+        tools_request = {
+            "jsonrpc": "2.0",
+            "id": "cms_tools_list",
+            "method": "tools/list",
+            "params": {}
+        }
+        process.stdin.write(json.dumps(tools_request) + "\n")
+        process.stdin.flush()
+        
+        # Read tools/list response
+        tools_response_line = process.stdout.readline()
+        if not tools_response_line:
+            logger.error(f"[{server_name}] No response to tools/list request")
+            return []
+        
+        try:
+            tools_response = json.loads(tools_response_line)
+            if "error" in tools_response:
+                logger.error(f"[{server_name}] tools/list error: {tools_response['error']}")
+                return []
+            
+            tools = tools_response.get("result", {}).get("tools", [])
+            logger.info(f"[{server_name}] Discovered {len(tools)} tools")
+        except json.JSONDecodeError:
+            logger.error(f"[{server_name}] Invalid JSON in tools/list response")
+            return []
+        
+        # Cache tools to tools_cache.json
+        if tools:
+            try:
+                cache = {}
+                if TOOLS_CACHE_PATH.exists():
+                    with open(TOOLS_CACHE_PATH, 'r') as f:
+                        cache = json.load(f)
+                
+                cache[server_name] = tools
+                
+                with open(TOOLS_CACHE_PATH, 'w') as f:
+                    json.dump(cache, f, indent=2, ensure_ascii=False)
+                
+                logger.info(f"[{server_name}] Cached {len(tools)} tools for CMS")
+            except Exception as e:
+                logger.error(f"[{server_name}] Failed to cache tools: {e}")
+        
+        return tools
+        
+    except Exception as e:
+        logger.error(f"[{server_name}] Tool discovery failed: {e}")
+        return []
+    
+    finally:
+        # Ensure process is terminated
+        if process is not None:
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            except Exception:
+                pass
+            logger.info(f"[{server_name}] Process terminated")
+
+
+def remove_tools_from_cache(server_name: str) -> None:
+    """Remove tools from cache when MCP server is disabled or deleted."""
+    try:
+        if not TOOLS_CACHE_PATH.exists():
+            return
+        
+        with open(TOOLS_CACHE_PATH, 'r') as f:
+            cache = json.load(f)
+        
+        if server_name in cache:
+            del cache[server_name]
+            
+            with open(TOOLS_CACHE_PATH, 'w') as f:
+                json.dump(cache, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"[{server_name}] Removed tools from cache")
+    except Exception as e:
+        logger.error(f"Failed to remove tools from cache: {e}")
 
 
 def generate_session_token() -> str:
@@ -509,7 +696,12 @@ class CMSHandler(SimpleHTTPRequestHandler):
                 
                 if save_mcp_config(config):
                     logger.info(f"Created MCP server: {name}")
-                    self.send_json_response({"success": True, "name": name}, 201)
+                    # Discover tools immediately (in background)
+                    if not server_config.get("disabled"):
+                        tools = discover_tools_for_server(name, server_config)
+                        self.send_json_response({"success": True, "name": name, "tools_discovered": len(tools)}, 201)
+                    else:
+                        self.send_json_response({"success": True, "name": name}, 201)
                 else:
                     self.send_json_response({"error": "Failed to save config"}, 500)
             except Exception as e:
@@ -627,6 +819,44 @@ class CMSHandler(SimpleHTTPRequestHandler):
                 logger.error(f"Restore tools config failed: {e}")
                 self.send_json_response({"error": str(e)}, 400)
         
+        elif path == "/api/mcp-tools/refresh":
+            if not self.require_auth():
+                return
+            try:
+                body = self.read_body()
+                server_name = body.get("serverName", "").strip()
+                
+                config = load_mcp_config()
+                
+                if server_name:
+                    # Refresh specific server
+                    if server_name not in config.get("mcpServers", {}):
+                        self.send_json_response({"error": "Server not found"}, 404)
+                        return
+                    
+                    server_config = config["mcpServers"][server_name]
+                    tools = discover_tools_for_server(server_name, server_config)
+                    self.send_json_response({"success": True, "server": server_name, "tools_discovered": len(tools)})
+                else:
+                    # Refresh all enabled servers
+                    total_tools = 0
+                    servers_refreshed = []
+                    
+                    for name, server_config in config.get("mcpServers", {}).items():
+                        if not server_config.get("disabled"):
+                            tools = discover_tools_for_server(name, server_config)
+                            total_tools += len(tools)
+                            servers_refreshed.append(name)
+                    
+                    self.send_json_response({
+                        "success": True,
+                        "servers_refreshed": servers_refreshed,
+                        "total_tools_discovered": total_tools
+                    })
+            except Exception as e:
+                logger.error(f"Refresh tools failed: {e}")
+                self.send_json_response({"error": str(e)}, 400)
+        
         else:
             self.send_json_response({"error": "Not found"}, 404)
     
@@ -670,6 +900,7 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     return
                 
                 server = config["mcpServers"][server_name]
+                was_disabled = server.get("disabled", False)
                 
                 # Update type and clean up type-specific fields
                 if "type" in body:
@@ -718,9 +949,22 @@ class CMSHandler(SimpleHTTPRequestHandler):
                     elif "disabled" in server:
                         del server["disabled"]
                 
+                is_now_disabled = server.get("disabled", False)
+                
                 if save_mcp_config(config):
                     logger.info(f"Updated MCP server: {server_name}")
-                    self.send_json_response({"success": True, "name": server_name})
+                    
+                    # Handle tool discovery based on disabled state change
+                    if was_disabled and not is_now_disabled:
+                        # Server was enabled - discover tools
+                        tools = discover_tools_for_server(server_name, server)
+                        self.send_json_response({"success": True, "name": server_name, "tools_discovered": len(tools)})
+                    elif not was_disabled and is_now_disabled:
+                        # Server was disabled - remove tools from cache
+                        remove_tools_from_cache(server_name)
+                        self.send_json_response({"success": True, "name": server_name})
+                    else:
+                        self.send_json_response({"success": True, "name": server_name})
                 else:
                     self.send_json_response({"error": "Failed to save config"}, 500)
             except Exception as e:
@@ -762,6 +1006,8 @@ class CMSHandler(SimpleHTTPRequestHandler):
                 
                 if save_mcp_config(config):
                     logger.info(f"Deleted MCP server: {server_name}")
+                    # Remove tools from cache
+                    remove_tools_from_cache(server_name)
                     self.send_json_response({"success": True})
                 else:
                     self.send_json_response({"error": "Failed to save config"}, 500)

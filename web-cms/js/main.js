@@ -320,16 +320,32 @@ function setupEventListeners() {
         }
       }
 
-      let success = false;
-      if (originalName) {
-        success = await updateMcpServer(originalName, serverData);
-      } else {
-        success = await createMcpServer(serverData);
-      }
+      // Show loading indicator
+      const submitBtn = mcpServerForm.querySelector('button[type="submit"]');
+      const originalBtnText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="loading-spinner"></span> Discovering tools...';
 
-      if (success) {
-        hideMcpServerModal();
-        await fetchMcpServers();
+      let success = false;
+      try {
+        if (originalName) {
+          success = await updateMcpServer(originalName, serverData);
+        } else {
+          success = await createMcpServer(serverData);
+        }
+
+        if (success) {
+          hideMcpServerModal();
+          await fetchMcpServers();
+          // Also refresh tools list if on tools tab
+          if (window.appState.currentTab === 'mcp-tools' && typeof fetchMcpTools === 'function') {
+            await fetchMcpTools();
+          }
+        }
+      } finally {
+        // Restore button
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
       }
     });
   }
