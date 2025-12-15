@@ -12,6 +12,90 @@ function initConnectionHandler() {
 
   // Copy endpoint button handler
   elements.copyEndpointBtn.addEventListener('click', copyEndpointUrl);
+
+  // Custom endpoint button handler
+  if (elements.customEndpointBtn) {
+    elements.customEndpointBtn.addEventListener('click', openCustomEndpointModal);
+  }
+
+  // Custom endpoint modal handlers
+  if (elements.customEndpointModalClose) {
+    elements.customEndpointModalClose.addEventListener('click', closeCustomEndpointModal);
+  }
+  if (elements.customEndpointCancel) {
+    elements.customEndpointCancel.addEventListener('click', closeCustomEndpointModal);
+  }
+  if (elements.customEndpointConnect) {
+    elements.customEndpointConnect.addEventListener('click', connectToCustomEndpoint);
+  }
+  if (elements.customEndpointModal) {
+    elements.customEndpointModal.addEventListener('click', (e) => {
+      if (e.target === elements.customEndpointModal) {
+        closeCustomEndpointModal();
+      }
+    });
+  }
+  // Handle Enter key in custom endpoint input
+  if (elements.customEndpointUrl) {
+    elements.customEndpointUrl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        connectToCustomEndpoint();
+      }
+    });
+  }
+}
+
+/**
+ * Open custom endpoint modal
+ */
+function openCustomEndpointModal() {
+  if (elements.customEndpointModal) {
+    // Pre-fill with current endpoint URL
+    const currentUrl = state.customEndpointUrl || buildWebSocketUrl();
+    elements.customEndpointUrl.value = currentUrl;
+    elements.customEndpointModal.classList.remove('hidden');
+    elements.customEndpointModal.style.display = 'flex';
+    elements.customEndpointUrl.focus();
+    elements.customEndpointUrl.select();
+  }
+}
+
+/**
+ * Close custom endpoint modal
+ */
+function closeCustomEndpointModal() {
+  if (elements.customEndpointModal) {
+    elements.customEndpointModal.classList.add('hidden');
+    elements.customEndpointModal.style.display = 'none';
+  }
+}
+
+/**
+ * Connect to custom endpoint from modal
+ */
+function connectToCustomEndpoint() {
+  const customUrl = elements.customEndpointUrl.value.trim();
+  if (!customUrl) {
+    log('error', 'Please enter a WebSocket URL');
+    return;
+  }
+
+  // Validate URL format
+  if (!customUrl.startsWith('ws://') && !customUrl.startsWith('wss://')) {
+    log('error', 'URL must start with ws:// or wss://');
+    return;
+  }
+
+  // Store custom endpoint and connect
+  state.customEndpointUrl = customUrl;
+  closeCustomEndpointModal();
+
+  // Disconnect if already connected
+  if (state.isConnected) {
+    disconnect();
+  }
+
+  connect();
 }
 
 /**
@@ -29,7 +113,9 @@ function toggleConnection() {
  * Copy WebSocket endpoint URL to clipboard
  */
 async function copyEndpointUrl() {
-  const wsUrl = buildWebSocketUrl() + '/mcp';
+  // Use custom endpoint if set, otherwise build from host
+  const baseUrl = state.customEndpointUrl || buildWebSocketUrl();
+  const wsUrl = baseUrl.endsWith('/mcp') ? baseUrl : baseUrl + '/mcp';
   try {
     await navigator.clipboard.writeText(wsUrl);
     // Show feedback
@@ -74,13 +160,15 @@ function getSessionToken() {
 }
 
 function connect() {
-  // Build WebSocket URL from current host
-  let endpoint = buildWebSocketUrl();
+  // Use custom endpoint if set, otherwise build from host
+  let endpoint = state.customEndpointUrl || buildWebSocketUrl();
 
-  // Add session token for authentication
-  const sessionToken = getSessionToken();
-  if (sessionToken) {
-    endpoint = `${endpoint}?token=${sessionToken}`;
+  // Add session token for authentication (only for local connections)
+  if (!state.customEndpointUrl) {
+    const sessionToken = getSessionToken();
+    if (sessionToken) {
+      endpoint = `${endpoint}?token=${sessionToken}`;
+    }
   }
 
   try {

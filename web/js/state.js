@@ -15,6 +15,8 @@ const state = {
   pendingRequests: new Map(),
   tools: [],
   selectedToolIndex: 0,
+  // Custom endpoint URL (null = use auto-generated)
+  customEndpointUrl: null,
   // Chat state
   chatHistory: [],
   isGenerating: false,
@@ -37,6 +39,7 @@ const state = {
 const elements = {
   connectionToggleBtn: document.getElementById('connection-toggle-btn'),
   copyEndpointBtn: document.getElementById('copy-endpoint-btn'),
+  customEndpointBtn: document.getElementById('custom-endpoint-btn'),
   connectionStatus: document.getElementById('connection-status'),
   responsePanel: document.querySelector('.response-panel'),
   responseContent: document.getElementById('response-content'),
@@ -54,7 +57,13 @@ const elements = {
   chatSettingsBtn: document.getElementById('chat-settings-btn'),
   // Settings modal elements (will be populated after DOM loads)
   settingsModal: null,
-  settingsForm: null
+  settingsForm: null,
+  // Custom endpoint modal elements
+  customEndpointModal: document.getElementById('custom-endpoint-modal'),
+  customEndpointUrl: document.getElementById('custom-endpoint-url'),
+  customEndpointModalClose: document.getElementById('custom-endpoint-modal-close'),
+  customEndpointCancel: document.getElementById('custom-endpoint-cancel'),
+  customEndpointConnect: document.getElementById('custom-endpoint-connect')
 };
 
 // ============================================
