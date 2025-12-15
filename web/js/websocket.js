@@ -28,6 +28,9 @@ function initConnectionHandler() {
   if (elements.customEndpointConnect) {
     elements.customEndpointConnect.addEventListener('click', connectToCustomEndpoint);
   }
+  if (elements.customEndpointReset) {
+    elements.customEndpointReset.addEventListener('click', resetCustomEndpoint);
+  }
   if (elements.customEndpointModal) {
     elements.customEndpointModal.addEventListener('click', (e) => {
       if (e.target === elements.customEndpointModal) {
@@ -43,6 +46,16 @@ function initConnectionHandler() {
       }
     });
   }
+}
+
+/**
+ * Reset custom endpoint to auto-generated URL
+ */
+function resetCustomEndpoint() {
+  state.customEndpointUrl = null;
+  const autoUrl = buildWebSocketUrl();
+  elements.customEndpointUrl.value = autoUrl;
+  log('info', `Reset to auto-generated endpoint: ${autoUrl}`);
 }
 
 /**

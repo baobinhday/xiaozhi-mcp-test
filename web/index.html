@@ -287,15 +287,21 @@
                 </div>
 
                 <!-- Modal Footer -->
-                <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10 bg-[#1c1c26]/50">
-                    <button id="custom-endpoint-cancel"
-                        class="px-4 py-2 bg-[#1c1c26] border border-white/10 rounded-lg text-zinc-400 text-sm font-medium hover:bg-[#272732] hover:text-zinc-200 transition-all cursor-pointer">
-                        Cancel
+                <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-white/10 bg-[#1c1c26]/50">
+                    <button id="custom-endpoint-reset"
+                        class="px-4 py-2 bg-amber-500/20 border border-amber-500/30 rounded-lg text-amber-400 text-sm font-medium hover:bg-amber-500/30 transition-all cursor-pointer">
+                        Reset
                     </button>
-                    <button id="custom-endpoint-connect"
-                        class="px-4 py-2 bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-lg text-sm font-medium hover:shadow-lg hover:shadow-indigo-500/20 transition-all cursor-pointer">
-                        Connect
-                    </button>
+                    <div class="flex gap-3">
+                        <button id="custom-endpoint-cancel"
+                            class="px-4 py-2 bg-[#1c1c26] border border-white/10 rounded-lg text-zinc-400 text-sm font-medium hover:bg-[#272732] hover:text-zinc-200 transition-all cursor-pointer">
+                            Cancel
+                        </button>
+                        <button id="custom-endpoint-connect"
+                            class="px-4 py-2 bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-lg text-sm font-medium hover:shadow-lg hover:shadow-indigo-500/20 transition-all cursor-pointer">
+                            Connect
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

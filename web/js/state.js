@@ -63,7 +63,8 @@ const elements = {
   customEndpointUrl: document.getElementById('custom-endpoint-url'),
   customEndpointModalClose: document.getElementById('custom-endpoint-modal-close'),
   customEndpointCancel: document.getElementById('custom-endpoint-cancel'),
-  customEndpointConnect: document.getElementById('custom-endpoint-connect')
+  customEndpointConnect: document.getElementById('custom-endpoint-connect'),
+  customEndpointReset: document.getElementById('custom-endpoint-reset')
 };
 
 // ============================================
