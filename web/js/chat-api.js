@@ -98,8 +98,9 @@ async function sendChatMessage() {
   }
 
   // Add user message to UI and history
-  addChatMessage(message, 'user');
+  const historyIndex = state.chatHistory.length;
   state.chatHistory.push({ role: 'user', content: message });
+  addChatMessage(message, 'user', historyIndex);
 
   // Clear input
   elements.chatInput.value = '';
@@ -499,7 +500,7 @@ function updateAssistantMessage(div, content, isError = false) {
   elements.chatBody.scrollTop = elements.chatBody.scrollHeight;
 }
 
-function addChatMessage(content, role) {
+function addChatMessage(content, role, historyIndex = null) {
   const emptyState = elements.chatBody.querySelector('.empty-state');
   if (emptyState) {
     emptyState.remove();
@@ -510,6 +511,9 @@ function addChatMessage(content, role) {
     const messageWrapper = document.createElement('div');
     messageWrapper.className = 'chat-message-wrapper max-w-[80%] self-end';
     messageWrapper.setAttribute('data-message-content', content);
+    if (historyIndex !== null) {
+      messageWrapper.setAttribute('data-history-index', historyIndex);
+    }
 
     messageWrapper.innerHTML = `
       <div class="chat-message px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap bg-gradient-to-br from-indigo-500 to-violet-500 text-white rounded-br-sm selection:bg-blue-100! selection:text-neutral-700">${escapeHtml(content)}</div>
@@ -562,7 +566,7 @@ async function regenerateResponse(currentDiv) {
     return;
   }
 
-  // Find the index of the current assistant response in the DOM
+  // Find the user message wrapper that precedes this assistant response
   const chatMessages = Array.from(elements.chatBody.children);
   const currentIndex = chatMessages.indexOf(currentDiv);
 
@@ -571,26 +575,34 @@ async function regenerateResponse(currentDiv) {
     return;
   }
 
-  // Remove the current assistant message from the DOM
-  currentDiv.remove();
-
-  // Remove the last assistant response from history if it exists
-  // We need to remove all messages after the last user message
-  let lastUserIndex = -1;
-  for (let i = state.chatHistory.length - 1; i >= 0; i--) {
-    if (state.chatHistory[i].role === 'user') {
-      lastUserIndex = i;
+  // Find the previous user message wrapper (search backward from currentDiv)
+  let userMessageWrapper = null;
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    const el = chatMessages[i];
+    if (el.classList.contains('chat-message-wrapper') && el.hasAttribute('data-history-index')) {
+      userMessageWrapper = el;
       break;
     }
   }
 
-  if (lastUserIndex === -1) {
+  if (!userMessageWrapper) {
     log('error', 'No user message found to regenerate from');
     return;
   }
 
-  // Remove all messages after the last user message (assistant and tool responses)
-  state.chatHistory = state.chatHistory.slice(0, lastUserIndex + 1);
+  // Get the history index from the user message
+  const userHistoryIndex = parseInt(userMessageWrapper.getAttribute('data-history-index'), 10);
+
+  if (isNaN(userHistoryIndex) || userHistoryIndex < 0) {
+    log('error', 'Invalid history index for regeneration');
+    return;
+  }
+
+  // Remove the current assistant message from the DOM
+  currentDiv.remove();
+
+  // Remove all messages after the user message (keep the user message itself)
+  state.chatHistory = state.chatHistory.slice(0, userHistoryIndex + 1);
 
   log('info', 'Regenerating response...');
 
@@ -652,44 +664,27 @@ function editUserMessage(messageWrapper) {
       return;
     }
 
-    // Find the index of this message in the chat history
-    const allMessageWrappers = Array.from(elements.chatBody.querySelectorAll('.chat-message-wrapper, .chat-message'));
-    const currentIndex = allMessageWrappers.indexOf(messageWrapper);
+    // Get the history index from the data attribute
+    const historyIndex = parseInt(messageWrapper.getAttribute('data-history-index'), 10);
 
-    if (currentIndex === -1) {
-      log('error', 'Could not find message to edit');
+    if (isNaN(historyIndex) || historyIndex < 0) {
+      log('error', 'Could not find message index in chat history');
       return;
     }
 
     // Remove all messages after this one from the DOM
-    for (let i = allMessageWrappers.length - 1; i > currentIndex; i--) {
+    const allMessageWrappers = Array.from(elements.chatBody.querySelectorAll('.chat-message-wrapper, .chat-message'));
+    const currentDomIndex = allMessageWrappers.indexOf(messageWrapper);
+    for (let i = allMessageWrappers.length - 1; i > currentDomIndex; i--) {
       allMessageWrappers[i].remove();
     }
 
-    // Find this message in chat history and remove everything after it
-    let userMessageIndex = -1;
-    let userMessageCount = 0;
+    // Remove all messages after this user message in history and update with new content
+    state.chatHistory = state.chatHistory.slice(0, historyIndex);
+    state.chatHistory.push({ role: 'user', content: newContent });
 
-    for (let i = 0; i < state.chatHistory.length; i++) {
-      if (state.chatHistory[i].role === 'user') {
-        if (userMessageCount === Math.floor(currentIndex / 2)) {
-          userMessageIndex = i;
-          break;
-        }
-        userMessageCount++;
-      }
-    }
-
-    if (userMessageIndex !== -1) {
-      // Remove all messages after this user message
-      state.chatHistory = state.chatHistory.slice(0, userMessageIndex);
-
-      // Update the user message content in history
-      state.chatHistory.push({ role: 'user', content: newContent });
-    } else {
-      // If we can't find it, just clear everything and add the edited message
-      state.chatHistory = [{ role: 'user', content: newContent }];
-    }
+    // Update the stored history index (same position since we sliced and pushed)
+    messageWrapper.setAttribute('data-history-index', historyIndex);
 
     // Update the message wrapper
     messageWrapper.setAttribute('data-message-content', newContent);
@@ -752,6 +747,34 @@ function getRecentHistory(maxMessages) {
   if (!maxMessages || state.chatHistory.length <= maxMessages) {
     return state.chatHistory;
   }
-  // Keep the most recent messages
-  return state.chatHistory.slice(-maxMessages);
+
+  // Calculate the start index for slicing
+  let startIndex = state.chatHistory.length - maxMessages;
+
+  // Ensure we don't cut in the middle of a tool call chain
+  // A tool call chain consists of: assistant (with tool_calls) -> tool (results)
+  // We need to find a safe cut point that doesn't break this sequence
+
+  // Move startIndex backward if we're cutting in the middle of a tool sequence
+  while (startIndex > 0) {
+    const msg = state.chatHistory[startIndex];
+
+    // If we're starting at a tool result, we need to include the preceding assistant message
+    if (msg.role === 'tool') {
+      startIndex--;
+      continue;
+    }
+
+    // If we're starting at an assistant message with tool_calls, 
+    // we need to include the preceding user message for context
+    if (msg.role === 'assistant' && msg.tool_calls) {
+      startIndex--;
+      continue;
+    }
+
+    // Safe cut point found (user message or regular assistant message)
+    break;
+  }
+
+  return state.chatHistory.slice(startIndex);
 }

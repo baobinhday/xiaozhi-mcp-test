@@ -52,6 +52,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Độc lập", "Sáng tạo", "Lãnh đạo", "Quyết đoán"],
         "strengths": "Tự tin, có tầm nhìn, tinh thần tiên phong",
         "challenges": "Bướng bỉnh, ích kỷ, thiếu kiên nhẫn",
+        "weakness": "Hay cô đơn vì quá độc lập, đôi khi áp đặt ý kiến lên người khác, khó chấp nhận sai lầm",
+        "love": "Thích dẫn dắt trong mối quan hệ, cần đối tác tôn trọng không gian riêng, chân thành nhưng đôi khi thiếu lãng mạn",
+        "message": "Hãy học cách lắng nghe và hợp tác. Sức mạnh thật sự nằm ở việc biết khi nào cần tiến và khi nào cần lùi.",
         "career": ["Doanh nhân", "Giám đốc", "Nhà phát minh", "Freelancer"],
     },
     2: {
@@ -59,6 +62,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Hợp tác", "Nhạy cảm", "Ngoại giao", "Kiên nhẫn"],
         "strengths": "Tinh tế, biết lắng nghe, giỏi làm việc nhóm",
         "challenges": "Thiếu quyết đoán, dễ bị tổn thương, phụ thuộc",
+        "weakness": "Dễ đánh mất bản thân vì muốn làm hài lòng người khác, sợ xung đột, hay do dự",
+        "love": "Lãng mạn và chu đáo, cần sự ổn định và an toàn, đối tác lý tưởng là người biết trân trọng sự nhạy cảm của bạn",
+        "message": "Đừng quên yêu thương bản thân. Sự hòa hợp bắt đầu từ việc cân bằng giữa nhu cầu của mình và người khác.",
         "career": ["Nhà tư vấn", "Trung gian", "Nghệ sĩ", "Nhà trị liệu"],
     },
     3: {
@@ -66,6 +72,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Sáng tạo", "Giao tiếp", "Lạc quan", "Nghệ thuật"],
         "strengths": "Vui vẻ, có khiếu biểu đạt, truyền cảm hứng",
         "challenges": "Thiếu tập trung, nông cạn, hay lo lắng",
+        "weakness": "Dễ bị phân tán, đôi khi hời hợt trong cảm xúc, khó hoàn thành những gì đã bắt đầu",
+        "love": "Vui vẻ và đầy sức sống, thích những mối quan hệ thú vị, cần đối tác biết thưởng thức niềm vui sống",
+        "message": "Tập trung năng lượng sáng tạo của bạn vào một vài mục tiêu quan trọng. Chiều sâu sẽ mang lại thành công bền vững.",
         "career": ["Nghệ sĩ", "Nhà văn", "Diễn giả", "Thiết kế"],
     },
     4: {
@@ -73,6 +82,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Ổn định", "Thực tế", "Kỷ luật", "Chăm chỉ"],
         "strengths": "Đáng tin cậy, có tổ chức, kiên trì",
         "challenges": "Cứng nhắc, bảo thủ, làm việc quá sức",
+        "weakness": "Khó thích nghi với thay đổi, hay lo lắng về an toàn, đôi khi quá nghiêm khắc với bản thân và người khác",
+        "love": "Trung thành và đáng tin cậy, thích sự ổn định lâu dài, thể hiện tình yêu qua hành động hơn lời nói",
+        "message": "Hãy cho phép mình linh hoạt hơn. Cuộc sống cần cả nền tảng vững chắc lẫn những khoảnh khắc bất ngờ.",
         "career": ["Kỹ sư", "Kế toán", "Kiến trúc sư", "Quản lý"],
     },
     5: {
@@ -80,6 +92,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Tự do", "Phiêu lưu", "Linh hoạt", "Đa năng"],
         "strengths": "Thích nghi tốt, tò mò, năng động",
         "challenges": "Thiếu cam kết, bồn chồn, thiếu trách nhiệm",
+        "weakness": "Sợ bị ràng buộc, dễ chán nản, đôi khi thiếu sự kiên định trong quyết định",
+        "love": "Cần không gian tự do trong mối quan hệ, thích những cuộc phiêu lưu cùng nhau, đối tác lý tưởng là người cởi mở và linh hoạt",
+        "message": "Tự do thật sự đến từ việc biết cam kết với điều quan trọng. Hãy tìm sự cân bằng giữa phiêu lưu và ổn định.",
         "career": ["Du lịch", "Bán hàng", "Báo chí", "Marketing"],
     },
     6: {
@@ -87,6 +102,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Trách nhiệm", "Yêu thương", "Gia đình", "Hài hòa"],
         "strengths": "Chu đáo, có trách nhiệm, biết quan tâm",
         "challenges": "Can thiệp quá mức, lo lắng, hy sinh quá nhiều",
+        "weakness": "Hay kiểm soát người thân vì lo lắng, quên chăm sóc bản thân, đôi khi mong đợi sự đền đáp",
+        "love": "Yêu thương sâu sắc và hết mình, coi trọng gia đình, đối tác cần biết trân trọng sự hy sinh của bạn",
+        "message": "Yêu thương người khác bắt đầu từ yêu thương bản thân. Hãy học cách cho đi mà không cần nhận lại.",
         "career": ["Y tế", "Giáo viên", "Tư vấn", "Vệ sĩ"],
     },
     7: {
@@ -94,6 +112,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Trí tuệ", "Phân tích", "Tâm linh", "Nội tâm"],
         "strengths": "Sâu sắc, trực giác mạnh, có chiều sâu tư duy",
         "challenges": "Cô đơn, hoài nghi, khó gần",
+        "weakness": "Hay cách ly khỏi thế giới, quá phân tích mọi thứ, khó tin tưởng người khác hoàn toàn",
+        "love": "Cần đối tác hiểu và tôn trọng nhu cầu riêng tư, tình yêu sâu sắc nhưng cần thời gian để mở lòng",
+        "message": "Tri thức là sức mạnh, nhưng kết nối với người khác cũng quan trọng không kém. Hãy mở lòng đón nhận.",
         "career": ["Nhà nghiên cứu", "Triết gia", "Nhà khoa học", "Tâm linh"],
     },
     8: {
@@ -101,6 +122,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Quyền lực", "Thành công", "Vật chất", "Tham vọng"],
         "strengths": "Có tầm nhìn kinh doanh, quyết đoán, mạnh mẽ",
         "challenges": "Tham công tiếc việc, kiểm soát, vật chất hóa",
+        "weakness": "Hay đặt công việc lên trên mối quan hệ, đôi khi cứng nhắc trong cách quản lý, dễ bị stress",
+        "love": "Trung thành và bảo vệ người yêu, thể hiện tình yêu qua sự chu cấp, cần đối tác hiểu tham vọng của mình",
+        "message": "Thành công thật sự bao gồm cả hạnh phúc cá nhân. Hãy nhớ rằng tiền bạc và quyền lực không thể mua được tình yêu thương.",
         "career": ["Doanh nhân", "Tài chính", "Luật sư", "Chính trị gia"],
     },
     9: {
@@ -108,6 +132,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Nhân đạo", "Bao dung", "Lý tưởng", "Nghệ thuật"],
         "strengths": "Rộng lượng, có lý tưởng, sáng tạo",
         "challenges": "Mơ mộng, thiếu thực tế, hy sinh quá mức",
+        "weakness": "Hay bỏ qua nhu cầu bản thân, đôi khi lý tưởng hóa mọi thứ, khó buông bỏ quá khứ",
+        "love": "Yêu thương vô điều kiện, lãng mạn và lý tưởng, cần đối tác chia sẻ giá trị nhân văn",
+        "message": "Hãy học cách buông bỏ để đón nhận cái mới. Sự hoàn thiện đến từ việc chấp nhận những khiếm khuyết.",
         "career": ["Từ thiện", "Nghệ thuật", "Giáo dục", "Y tế"],
     },
     11: {
@@ -115,6 +142,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Trực giác", "Tâm linh", "Truyền cảm hứng", "Khai sáng"],
         "strengths": "Trực giác mạnh, có tầm nhìn, khả năng chữa lành",
         "challenges": "Căng thẳng, lo lắng, kỳ vọng cao",
+        "weakness": "Dễ bị quá tải năng lượng, hay cảm thấy khác biệt với mọi người, đôi khi mất kết nối thực tế",
+        "love": "Tìm kiếm mối quan hệ tâm linh sâu sắc, cần đối tác hiểu được chiều sâu tâm hồn, yêu thương mãnh liệt",
+        "message": "Bạn mang theo sứ mệnh đặc biệt. Hãy tin vào trực giác nhưng cũng cần giữ vững kết nối với thực tế.",
         "career": ["Nhà tâm linh", "Nhà trị liệu", "Nghệ sĩ", "Diễn giả"],
     },
     22: {
@@ -122,6 +152,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Xây dựng", "Tầm nhìn lớn", "Thực hiện", "Di sản"],
         "strengths": "Biến ước mơ thành hiện thực, tầm nhìn xa, kiên định",
         "challenges": "Áp lực lớn, kỳ vọng quá cao, kiệt sức",
+        "weakness": "Hay đặt tiêu chuẩn quá cao cho bản thân, dễ bị kiệt sức vì gánh vác quá nhiều, khó chấp nhận thất bại",
+        "love": "Tìm kiếm đối tác chia sẻ tầm nhìn lớn, trung thành và cam kết, thể hiện tình yêu qua việc xây dựng tương lai chung",
+        "message": "Bạn có khả năng tạo ra di sản vĩ đại. Hãy nhớ nghỉ ngơi và chia sẻ gánh nặng với người khác.",
         "career": ["Kiến trúc sư", "CEO", "Chính trị gia", "Nhà từ thiện lớn"],
     },
     33: {
@@ -129,6 +162,9 @@ NUMBER_MEANINGS = {
         "keywords": ["Chữa lành", "Phụng sự", "Hy sinh", "Tình yêu vô điều kiện"],
         "strengths": "Yêu thương vô điều kiện, khả năng chữa lành, truyền cảm hứng",
         "challenges": "Gánh nặng trách nhiệm, tự hy sinh quá mức",
+        "weakness": "Hay quên bản thân vì phụng sự người khác, đôi khi cảm thấy mệt mỏi vì gánh vác quá nhiều, khó từ chối",
+        "love": "Yêu thương vô điều kiện và hy sinh cao cả, tìm kiếm mối quan hệ tâm linh, đối tác cần biết trân trọng trái tim lớn của bạn",
+        "message": "Bạn là nguồn sáng cho thế giới. Nhưng hãy nhớ rằng để tiếp tục tỏa sáng, bạn cần chăm sóc ngọn lửa bên trong mình.",
         "career": ["Nhà trị liệu", "Nhà tâm linh", "Thầy giáo", "Nhà từ thiện"],
     },
 }
