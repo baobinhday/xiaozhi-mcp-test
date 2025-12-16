@@ -60,6 +60,10 @@ SESSION_DURATION_HOURS = 24
 # In-memory session storage
 sessions = {}
 
+# MCP WebSocket Token (for validating mcp_pipe connections)
+# If set, mcp_pipe must include ?token=XXX in the WebSocket URL
+MCP_WS_TOKEN = os.environ.get("MCP_WS_TOKEN", "")
+
 # Rate limiting storage
 login_attempts = {}  # Dict: ip -> {"count": int, "first_attempt": datetime, "last_failed": datetime}
 MAX_LOGIN_ATTEMPTS = 3
@@ -515,6 +519,9 @@ async def handle_connection(websocket, path):
         except ValueError:
             pass
     
+    # Debug logging
+    logger.info(f"WebSocket connection: path='{path}', params={params}")
+    
     # Determine client type from path
     # /browser = browser client
     # /mcp = MCP tool
@@ -530,6 +537,16 @@ async def handle_connection(websocket, path):
     
     if client_type == "mcp":
         server_name = params.get("server", "unknown")
+        
+        # Validate token if MCP_WS_TOKEN is configured
+        if MCP_WS_TOKEN:
+            provided_token = params.get("token", "")
+            if provided_token != MCP_WS_TOKEN:
+                logger.warning(f"MCP connection rejected: invalid token from server '{server_name}'")
+                await websocket.close(4001, "Invalid or missing token")
+                return
+            logger.info(f"MCP connection token validated for server '{server_name}'")
+        
         await hub.register_mcp(websocket, server_name)
         
         try:

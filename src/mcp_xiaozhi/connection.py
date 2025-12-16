@@ -47,7 +47,21 @@ async def connect_with_retry(uri: str, target: str, endpoint_id: Optional[int] =
             await connect_to_server(uri, target, endpoint_id)
 
         except Exception as e:
+            error_msg = str(e)
             reconnect_attempt += 1
+            
+            # Check if this is an authentication error (4001)
+            # Don't retry auth errors - they require configuration fix
+            if "4001" in error_msg or "Invalid or missing token" in error_msg:
+                logger.error(
+                    f"[{target}] Authentication failed - invalid or missing token. "
+                    f"Please check endpoint URL token matches MCP_WS_TOKEN in web server."
+                )
+                if endpoint_id:
+                    update_endpoint_status(endpoint_id, 'error', 'Authentication failed - invalid token')
+                # Raise to stop this connection task
+                raise RuntimeError(f"[{target}] Authentication failed - stopping retry") from e
+            
             logger.warning(
                 f"[{target}] Connection closed (attempt {reconnect_attempt}): {e}"
             )

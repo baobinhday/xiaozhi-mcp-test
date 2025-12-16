@@ -44,7 +44,14 @@ async def _run_server_for_endpoint(endpoint_url: str, endpoint_name: str, server
     endpoint = get_endpoint_by_name(endpoint_name)
     endpoint_id = endpoint["id"] if endpoint else None
     
-    await connect_with_retry(endpoint_url, server, endpoint_id)
+    try:
+        await connect_with_retry(endpoint_url, server, endpoint_id)
+    except RuntimeError as e:
+        # Authentication errors are raised as RuntimeError - handle gracefully
+        if "Authentication failed" in str(e):
+            logger.warning(f"[{endpoint_name}:{server}] Stopped due to authentication failure")
+        else:
+            raise
 
 
 async def _wait_for_endpoints() -> list[dict]:
@@ -199,12 +206,36 @@ async def _run_servers(target_arg: Optional[str]) -> None:
             endpoint_url = endpoint["url"]
             
             is_new_endpoint = endpoint_name not in known_endpoints
+            url_changed = not is_new_endpoint and known_endpoints.get(endpoint_name) != endpoint_url
             
             if is_new_endpoint:
                 known_endpoints[endpoint_name] = endpoint_url
                 logger.info(f"📡 New endpoint: {endpoint_name} -> {endpoint_url}")
+            elif url_changed:
+                # URL changed - cancel existing tasks and reconnect
+                old_url = known_endpoints[endpoint_name]
+                known_endpoints[endpoint_name] = endpoint_url
+                logger.info(f"🔄 Endpoint URL changed: {endpoint_name}")
+                logger.info(f"   Old: {old_url}")
+                logger.info(f"   New: {endpoint_url}")
+                
+                # Cancel all tasks for this endpoint
+                tasks_to_cancel = []
+                for task_key in list(running_tasks.keys()):
+                    if task_key.startswith(f"{endpoint_name}:"):
+                        tasks_to_cancel.append(task_key)
+                
+                for task_key in tasks_to_cancel:
+                    task = running_tasks[task_key]
+                    logger.info(f"🛑 Stopping for reconnect: {task_key}")
+                    task.cancel()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
+                    del running_tasks[task_key]
             
-            # Start servers for new endpoints OR start newly added servers for existing endpoints
+            # Start servers for new endpoints, URL changes, OR start newly added servers for existing endpoints
             if not target_arg:
                 for server in enabled:
                     task_key = f"{endpoint_name}:{server}"
@@ -215,7 +246,7 @@ async def _run_servers(target_arg: Optional[str]) -> None:
                             _run_server_for_endpoint(endpoint_url, endpoint_name, server)
                         )
                         running_tasks[task_key] = task
-                        if not is_new_endpoint and config_changed:
+                        if not is_new_endpoint and (config_changed or url_changed):
                             logger.info(f"🚀 Starting: {task_key}")
             else:
                 # Run specific target

@@ -87,7 +87,7 @@ function renderEndpoints() {
                     </div>
                     <div class="endpoint-actions">
                         <button class="btn btn-sm btn-toggle btn-toggle-endpoint" data-endpoint-id="${endpoint.id}" data-enabled="${endpoint.enabled}">
-                            ${endpoint.enabled ? 'Disable' : 'Enable'}
+                            ${endpoint.enabled ? 'Disconnect' : 'Connect'}
                         </button>
                         <button class="btn btn-sm btn-edit btn-edit-endpoint" data-endpoint-id="${endpoint.id}">Edit</button>
                         <button class="btn btn-sm btn-delete btn-delete-endpoint" data-endpoint-id="${endpoint.id}" data-endpoint-name="${escapeHtml(endpoint.name)}">Delete</button>
@@ -103,22 +103,48 @@ function maskUrl(url) {
   return url.substring(0, 25) + '...' + url.substring(url.length - 10);
 }
 
-// Status Polling
+// Status Streaming with SSE
 function startStatusPolling() {
-  // Clear any existing interval
-  if (window.appState.statusPollingInterval) {
-    clearInterval(window.appState.statusPollingInterval);
-  }
+  // Close any existing EventSource connection
+  stopStatusPolling();
 
-  // Poll every 30 seconds
-  window.appState.statusPollingInterval = setInterval(async () => {
-    if (window.appState.currentTab === 'endpoints') {
-      await fetchEndpoints();
+  // Create SSE connection for real-time updates
+  const eventSource = new EventSource('/api/endpoints/stream');
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.endpoints) {
+        window.appState.endpoints = data.endpoints;
+        if (window.appState.currentTab === 'endpoints') {
+          renderEndpoints();
+          updateStats();
+        }
+      }
+    } catch (e) {
+      console.error('SSE parse error:', e);
     }
-  }, 30000);
+  };
+
+  eventSource.onerror = (error) => {
+    console.warn('SSE connection error, will auto-reconnect:', error);
+    // EventSource will automatically attempt to reconnect
+    // But if authentication fails, we should close and stop
+    if (eventSource.readyState === EventSource.CLOSED) {
+      console.log('SSE connection closed');
+    }
+  };
+
+  // Store the EventSource reference for cleanup
+  window.appState.statusEventSource = eventSource;
 }
 
 function stopStatusPolling() {
+  if (window.appState.statusEventSource) {
+    window.appState.statusEventSource.close();
+    window.appState.statusEventSource = null;
+  }
+  // Also clear any legacy polling interval (for backward compatibility)
   if (window.appState.statusPollingInterval) {
     clearInterval(window.appState.statusPollingInterval);
     window.appState.statusPollingInterval = null;
