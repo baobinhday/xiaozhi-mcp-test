@@ -130,6 +130,25 @@ The system consists of three independent components with **clear separation of c
 8. **mcp_pipe returns** results to the requesting Web Hub → browser
 9. **Config changes** (add/remove endpoints) trigger reconnection to new endpoint list
 
+### Real-Time Updates with Ably
+
+The system uses **Ably** (a real-time pub/sub service) to enable instant communication between the CMS and MCP Pipe, eliminating the need for polling:
+
+```
+┌─────────────┐       ┌───────────────┐       ┌─────────────────┐
+│   Web CMS   │──────▶│     Ably      │──────▶│   mcp_pipe.py   │
+│ (Publisher) │       │ (Pub/Sub Hub) │       │  (Subscriber)   │
+└─────────────┘       └───────────────┘       └─────────────────┘
+```
+
+| Event | Trigger | Action |
+|-------|---------|--------|
+| `CONNECT` | Endpoint enabled/created | MCP Pipe starts connection to endpoint |
+| `DISCONNECT` | Endpoint disabled/deleted | MCP Pipe stops connection |
+| `UPDATE` | Endpoint URL changed | MCP Pipe reconnects with new URL |
+
+**Configuration**: Set `ABLY_API_KEY` in `.env` to enable real-time updates.
+
 ### Core Package (`src/mcp_xiaozhi/`)
 
 | Module | Purpose |
@@ -299,6 +318,7 @@ Default credentials: `admin` / `changeme` (configure via `CMS_USERNAME`, `CMS_PA
 │   ├── connection.py         # WebSocket handling
 │   ├── pipe.py               # I/O piping
 │   ├── server_builder.py     # Command building
+│   ├── ably_listener.py      # Ably real-time subscriber
 │   └── utils.py              # Utilities
 ├── tools/                    # Tool implementations
 │   ├── math_tools.py

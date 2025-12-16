@@ -19,7 +19,8 @@ web-cms/
 │   ├── services/               # Business logic layer
 │   │   ├── session.py          # Session & rate limiting
 │   │   ├── mcp_config.py       # MCP config file operations
-│   │   └── tool_discovery.py   # MCP server tool discovery
+│   │   ├── tool_discovery.py   # MCP server tool discovery
+│   │   └── ably.py             # Ably real-time publisher
 │   └── routes/                 # API route handlers
 │       ├── auth.py             # /api/login, /api/logout
 │       ├── endpoints.py        # /api/endpoints/*
@@ -52,6 +53,7 @@ Business logic, isolated from HTTP layer:
 - **session.py**: Session CRUD, rate limiting, token management
 - **mcp_config.py**: Load/save mcp_config.json, cache management
 - **tool_discovery.py**: MCP server stdio protocol for tool discovery
+- **ably.py**: Publishes real-time events (CONNECT/DISCONNECT/UPDATE) to Ably for mcp_pipe.py
 
 ### Dependencies (`dependencies.py`)
 FastAPI dependency injection:
@@ -119,4 +121,21 @@ Default: http://localhost:8890
 |------|---------|
 | `data/mcp_config.json` | MCP server configurations |
 | `data/tools_cache.json` | Discovered tools cache |
+
+## Real-Time Updates (Ably)
+
+When endpoints are created, updated, or deleted, the CMS publishes events to **Ably**:
+
+| Action | Event | Effect on mcp_pipe.py |
+|--------|-------|----------------------|
+| Create/Enable endpoint | `CONNECT` | Starts connection to endpoint |
+| Disable/Delete endpoint | `DISCONNECT` | Stops connection |
+| Update endpoint URL | `UPDATE` | Reconnects with new URL |
+
+**Configuration**: Set `ABLY_API_KEY` in `.env` to enable.
+
+## Database
+
+| File | Purpose |
+|------|---------|
 | `data/mcp_database.db` | SQLite database (endpoints, tool settings) |

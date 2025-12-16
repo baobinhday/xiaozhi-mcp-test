@@ -14,6 +14,9 @@ from backend.dependencies import require_auth
 from backend.schemas.endpoints import EndpointCreate, EndpointUpdate
 from backend.services.session import validate_session
 
+from backend.services.ably import ably_service
+
+
 # Import database functions - add parent to path if needed
 import sys
 from pathlib import Path
@@ -75,7 +78,6 @@ async def get_endpoint(endpoint_id: int, _: str = Depends(require_auth)):
         return endpoint
     raise HTTPException(status_code=404, detail="Not found")
 
-
 @router.post("/endpoints", status_code=201)
 async def create_endpoint_route(body: EndpointCreate, _: str = Depends(require_auth)):
     if not body.name.strip() or not body.url.strip():
@@ -83,6 +85,11 @@ async def create_endpoint_route(body: EndpointCreate, _: str = Depends(require_a
     
     try:
         endpoint = add_endpoint(body.name.strip(), body.url.strip(), body.enabled)
+        
+        # Publish connect event if enabled
+        if endpoint["enabled"]:
+            await ably_service.publish_endpoint_update("CONNECT", endpoint)
+            
         return endpoint
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -90,6 +97,11 @@ async def create_endpoint_route(body: EndpointCreate, _: str = Depends(require_a
 
 @router.put("/endpoints/{endpoint_id}")
 async def update_endpoint_route(endpoint_id: int, body: EndpointUpdate, _: str = Depends(require_auth)):
+    # Get current state to detect changes
+    current = get_endpoint_by_id(endpoint_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Not found")
+
     endpoint = update_endpoint(
         endpoint_id,
         name=body.name,
@@ -97,13 +109,30 @@ async def update_endpoint_route(endpoint_id: int, body: EndpointUpdate, _: str =
         enabled=body.enabled
     )
     if endpoint:
+        # Determine notification action
+        if endpoint["enabled"] and not current["enabled"]:
+            # Just enabled
+            await ably_service.publish_endpoint_update("CONNECT", endpoint)
+        elif not endpoint["enabled"] and current["enabled"]:
+            # Just disabled
+            await ably_service.publish_endpoint_update("DISCONNECT", endpoint)
+        elif endpoint["enabled"] and (current["url"] != endpoint["url"] or current["name"] != endpoint["name"]):
+            # URL or name changed while enabled - treat as update/reconnect
+            # Note: The subscriber should handle 'UPDATE' by reconnecting if URL changed
+            await ably_service.publish_endpoint_update("UPDATE", endpoint)
+
         return endpoint
     raise HTTPException(status_code=404, detail="Not found")
 
 
 @router.delete("/endpoints/{endpoint_id}")
 async def delete_endpoint_route(endpoint_id: int, _: str = Depends(require_auth)):
+    # Get endpoint before deleting to notify
+    endpoint = get_endpoint_by_id(endpoint_id)
+    
     if delete_endpoint(endpoint_id):
+        if endpoint and endpoint["enabled"]:
+            await ably_service.publish_endpoint_update("DISCONNECT", endpoint)
         return {"success": True}
     raise HTTPException(status_code=404, detail="Not found")
 
