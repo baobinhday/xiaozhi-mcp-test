@@ -2,11 +2,13 @@
  * Settings Modal Module
  * Chat settings configuration and model selection
  */
+import { state, elements, saveChatSettings } from './state.js';
+import { formatToolName, log } from './ui-utils.js';
 
 // ============================================
 // Modal Initialization
 // ============================================
-function initSettingsModal() {
+export function initSettingsModal() {
   elements.settingsModal = document.getElementById('settings-modal');
 
   // Close on backdrop click
@@ -27,7 +29,7 @@ function initSettingsModal() {
 // ============================================
 // Modal Open/Close
 // ============================================
-function openSettingsModal() {
+export function openSettingsModal() {
   if (!elements.settingsModal) return;
 
   // Populate form with current settings
@@ -62,7 +64,7 @@ function openSettingsModal() {
   log('info', 'Settings modal opened');
 }
 
-function closeSettingsModal() {
+export function closeSettingsModal() {
   if (!elements.settingsModal) return;
 
   elements.settingsModal.classList.add('hidden');
@@ -72,7 +74,7 @@ function closeSettingsModal() {
 // ============================================
 // Settings Save
 // ============================================
-function saveSettings() {
+export function saveSettings() {
   const baseUrlInput = document.getElementById('settings-base-url');
   const tokenInput = document.getElementById('settings-token');
   const modelSelect = document.getElementById('settings-model');
@@ -98,7 +100,7 @@ function saveSettings() {
 // ============================================
 // Tool Mode
 // ============================================
-function toggleCustomToolsPanel() {
+export function toggleCustomToolsPanel() {
   const panel = document.getElementById('custom-tools-panel');
   const isCustomMode = document.getElementById('tool-mode-custom').checked;
 
@@ -111,7 +113,7 @@ function toggleCustomToolsPanel() {
   }
 }
 
-function populateCustomToolsList() {
+export function populateCustomToolsList() {
   const listEl = document.getElementById('custom-tools-list');
   if (!listEl) return;
 
@@ -153,7 +155,7 @@ function populateCustomToolsList() {
   }
 }
 
-function updateSelectAllState() {
+export function updateSelectAllState() {
   const selectAllCheckbox = document.getElementById('select-all-tools');
   const checkboxes = document.querySelectorAll('.custom-tool-checkbox');
   if (!selectAllCheckbox || checkboxes.length === 0) return;
@@ -163,7 +165,7 @@ function updateSelectAllState() {
   selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
 }
 
-function getSelectedCustomTools() {
+export function getSelectedCustomTools() {
   const checkboxes = document.querySelectorAll('.custom-tool-checkbox:checked');
   return Array.from(checkboxes).map(cb => cb.value);
 }
@@ -171,7 +173,7 @@ function getSelectedCustomTools() {
 // ============================================
 // Model Fetching
 // ============================================
-async function fetchModels() {
+export async function fetchModels() {
   const baseUrlInput = document.getElementById('settings-base-url');
   const tokenInput = document.getElementById('settings-token');
   const modelSelect = document.getElementById('settings-model');
@@ -242,7 +244,7 @@ async function fetchModels() {
   }
 }
 
-function populateModelSelect(models, selectedModel) {
+export function populateModelSelect(models, selectedModel) {
   const modelSelect = document.getElementById('settings-model');
   if (!modelSelect) return;
 

@@ -1,5 +1,19 @@
 {
   "mcpServers": {
+    "my-fortune": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "mcp_server/fortune_server.py"
+      ]
+    },
+    "my-numerology": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "mcp_server/numerology_server.py"
+      ]
+    },
     "my-calculator": {
       "type": "stdio",
       "command": "python",

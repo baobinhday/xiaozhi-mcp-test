@@ -2,11 +2,12 @@
  * UI Utilities Module
  * Helper functions for UI rendering and formatting
  */
+import { elements } from './state.js';
 
 // ============================================
 // Tool Icons
 // ============================================
-function getToolIcon(toolName) {
+export function getToolIcon(toolName) {
   const iconMap = {
     'search': '🔍',
     'web': '🌐',
@@ -42,7 +43,7 @@ function getToolIcon(toolName) {
 // ============================================
 // Name Formatting
 // ============================================
-function formatToolName(name) {
+export function formatToolName(name) {
   return name
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -51,7 +52,7 @@ function formatToolName(name) {
     .join(' ');
 }
 
-function formatFieldName(name) {
+export function formatFieldName(name) {
   return name
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -63,13 +64,13 @@ function formatFieldName(name) {
 // ============================================
 // HTML Escaping
 // ============================================
-function escapeHtml(text) {
+export function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-function parseMarkdownToHtml(mdString) {
+export function parseMarkdownToHtml(mdString) {
   marked.setOptions({
     breaks: true,        // Convert \n to <br>
     gfm: true,          // GitHub Flavored Markdown
@@ -82,14 +83,14 @@ function parseMarkdownToHtml(mdString) {
   return htmlContent;
 }
 
-const parseTextFromMarkDown = (mdString) => {
+export const parseTextFromMarkDown = (mdString) => {
   const plainText = marked.parse(mdString, {
     renderer: plainTextRenderer()
   });
   return plainText;
 }
 
-function escapeForJs(text) {
+export function escapeForJs(text) {
   return text
     .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
@@ -102,7 +103,7 @@ function escapeForJs(text) {
 // ============================================
 // Loading State
 // ============================================
-function showLoading(message = 'Executing tool...') {
+export function showLoading(message = 'Executing tool...') {
   let overlay = elements.responsePanel.querySelector('.loading-overlay');
   if (!overlay) {
     overlay = document.createElement('div');
@@ -117,7 +118,7 @@ function showLoading(message = 'Executing tool...') {
   }
 }
 
-function hideLoading() {
+export function hideLoading() {
   const overlay = elements.responsePanel.querySelector('.loading-overlay');
   if (overlay) {
     overlay.remove();
@@ -127,12 +128,12 @@ function hideLoading() {
 // ============================================
 // Response Display
 // ============================================
-function displayResponse(data) {
+export function displayResponse(data) {
   const html = syntaxHighlightJSON(data);
   elements.responseContent.innerHTML = `<div class="json-viewer max-h-[calc(100vh-148px)] md:max-h-[calc(100vh-600px)] font-mono text-sm leading-relaxed whitespace-pre-wrap break-words">${html}</div>`;
 }
 
-function clearResponse() {
+export function clearResponse() {
   elements.responseContent.innerHTML = `
     <div class="empty-state flex flex-col items-center justify-center h-full text-zinc-500 gap-4 min-h-[200px]">
       <span class="empty-icon text-4xl opacity-50">📭</span>
@@ -141,7 +142,7 @@ function clearResponse() {
   `;
 }
 
-function displayRequest(data, tool = null) {
+export function displayRequest(data, tool = null) {
   let contentHtml = '';
 
   if (tool) {
@@ -174,7 +175,7 @@ function displayRequest(data, tool = null) {
   elements.requestContent.innerHTML = `<div class="request-display max-h-[calc(100vh-148px)] md:max-h-[calc(100vh-600px)] overflow-y-auto">${contentHtml}</div>`;
 }
 
-function clearRequest() {
+export function clearRequest() {
   elements.requestContent.innerHTML = `
     <div class="empty-state flex flex-col items-center justify-center h-full text-zinc-500 gap-4 min-h-[200px]">
       <span class="empty-icon text-4xl opacity-50">📤</span>
@@ -183,7 +184,7 @@ function clearRequest() {
   `;
 }
 
-function syntaxHighlightJSON(obj) {
+export function syntaxHighlightJSON(obj) {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(
     /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
@@ -208,7 +209,7 @@ function syntaxHighlightJSON(obj) {
 // ============================================
 // Logging
 // ============================================
-function log(type, message) {
+export function log(type, message) {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
   const entry = document.createElement('div');
 
@@ -233,12 +234,12 @@ function log(type, message) {
   elements.logContent.scrollTop = elements.logContent.scrollHeight;
 }
 
-function clearLogs() {
+export function clearLogs() {
   elements.logContent.innerHTML = '';
   log('info', 'Logs cleared');
 }
 
-function plainTextRenderer(options = {}) {
+export function plainTextRenderer(options = {}) {
   const render = new marked.Renderer();
 
   const whitespaceDelimiter = options?.spaces ? ' ' : '\n';

@@ -118,6 +118,35 @@ body {
   color: #e4e4e7;
 }
 
+/* TTS Provider selector */
+.tts-provider-select {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+  font-weight: 500;
+}
+
+.tts-provider-select:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.tts-provider-select:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.tts-provider-select option {
+  background: #1c1c26;
+  color: #e4e4e7;
+}
+
 @keyframes spin {
   from {
     transform: rotate(0deg);

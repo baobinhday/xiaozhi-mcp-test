@@ -6,7 +6,7 @@
 // ============================================
 // Global State
 // ============================================
-const state = {
+export const state = {
   websocket: null,
   isConnected: false,
   mcpConnected: false,
@@ -15,6 +15,8 @@ const state = {
   pendingRequests: new Map(),
   tools: [],
   selectedToolIndex: 0,
+  // Custom endpoint URL (null = use auto-generated)
+  customEndpointUrl: null,
   // Chat state
   chatHistory: [],
   isGenerating: false,
@@ -34,9 +36,10 @@ const state = {
 // ============================================
 // DOM Elements
 // ============================================
-const elements = {
-  wsEndpoint: document.getElementById('ws-endpoint'),
-  refreshEndpointsBtn: document.getElementById('refresh-endpoints-btn'),
+export const elements = {
+  connectionToggleBtn: document.getElementById('connection-toggle-btn'),
+  copyEndpointBtn: document.getElementById('copy-endpoint-btn'),
+  customEndpointBtn: document.getElementById('custom-endpoint-btn'),
   connectionStatus: document.getElementById('connection-status'),
   responsePanel: document.querySelector('.response-panel'),
   responseContent: document.getElementById('response-content'),
@@ -54,13 +57,28 @@ const elements = {
   chatSettingsBtn: document.getElementById('chat-settings-btn'),
   // Settings modal elements (will be populated after DOM loads)
   settingsModal: null,
-  settingsForm: null
+  settingsForm: null,
+  // Custom endpoint modal elements
+  customEndpointModal: document.getElementById('custom-endpoint-modal'),
+  customEndpointUrl: document.getElementById('custom-endpoint-url'),
+  customEndpointModalClose: document.getElementById('custom-endpoint-modal-close'),
+  customEndpointCancel: document.getElementById('custom-endpoint-cancel'),
+  customEndpointConnect: document.getElementById('custom-endpoint-connect'),
+  customEndpointReset: document.getElementById('custom-endpoint-reset'),
+  // Auth elements
+  loginView: document.getElementById('login-view'),
+  dashboardView: document.getElementById('dashboard-view'),
+  loginForm: document.getElementById('login-form'),
+  loginError: document.getElementById('login-error'),
+  logoutBtn: document.getElementById('logout-btn'),
+  loginUsername: document.getElementById('login-username'),
+  loginPassword: document.getElementById('login-password')
 };
 
 // ============================================
 // LocalStorage Persistence
 // ============================================
-function loadChatSettings() {
+export function loadChatSettings() {
   try {
     const saved = localStorage.getItem('chatSettings');
     if (saved) {
@@ -72,7 +90,7 @@ function loadChatSettings() {
   }
 }
 
-function saveChatSettings() {
+export function saveChatSettings() {
   try {
     localStorage.setItem('chatSettings', JSON.stringify(state.chatSettings));
   } catch (e) {

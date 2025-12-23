@@ -36,28 +36,81 @@ async def _run_server_for_endpoint(endpoint_url: str, endpoint_name: str, server
         endpoint_name: Name of the endpoint (for logging)
         server: Server name to run
     """
+    from .database import get_endpoint_by_name
+    
     logger.info(f"[{endpoint_name}] Starting server '{server}' -> {endpoint_url}")
-    await connect_with_retry(endpoint_url, server)
+    
+    # Look up endpoint ID for status tracking
+    endpoint = get_endpoint_by_name(endpoint_name)
+    endpoint_id = endpoint["id"] if endpoint else None
+    
+    try:
+        await connect_with_retry(endpoint_url, server, endpoint_id)
+    except RuntimeError as e:
+        # Authentication errors are raised as RuntimeError - handle gracefully
+        if "Authentication failed" in str(e):
+            logger.warning(f"[{endpoint_name}:{server}] Stopped due to authentication failure")
+        else:
+            raise
 
 
-async def _wait_for_endpoints() -> list[dict]:
-    """Wait for endpoints to be configured.
+from .ably_listener import AblyListener
+
+async def _stop_endpoint(endpoint_name: str, running_tasks: dict, known_endpoints: dict) -> None:
+    """Stop all servers for a specific endpoint."""
+    logger.info(f"🛑 Stopping endpoint: {endpoint_name}")
     
-    Polls the database every ENDPOINT_POLL_INTERVAL seconds until
-    at least one endpoint is available.
+    tasks_to_cancel = []
+    for task_key in list(running_tasks.keys()):
+        if task_key.startswith(f"{endpoint_name}:"):
+            tasks_to_cancel.append(task_key)
     
-    Returns:
-        List of endpoint dictionaries
-    """
-    logger.info(f"No endpoints configured. Waiting for endpoints... (check every {ENDPOINT_POLL_INTERVAL}s)")
-    logger.info("Add endpoints via CMS at http://localhost:8890")
+    for task_key in tasks_to_cancel:
+        task = running_tasks[task_key]
+        logger.info(f"🛑 Stopping task: {task_key}")
+        task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        del running_tasks[task_key]
     
-    while True:
-        await asyncio.sleep(ENDPOINT_POLL_INTERVAL)
-        endpoints = get_all_endpoint_urls()
-        if endpoints:
-            logger.info(f"Found {len(endpoints)} new endpoint(s)!")
-            return endpoints
+    if endpoint_name in known_endpoints:
+        del known_endpoints[endpoint_name]
+
+
+async def _start_endpoint(
+    endpoint_name: str, 
+    endpoint_url: str, 
+    running_tasks: dict, 
+    known_endpoints: dict,
+    enabled_servers: list,
+    target_arg: Optional[str] = None
+) -> None:
+    """Start servers for a specific endpoint."""
+    known_endpoints[endpoint_name] = endpoint_url
+    
+    if target_arg:
+        # Run specific target
+        task_key = f"{endpoint_name}:custom"
+        if task_key not in running_tasks or running_tasks[task_key].done():
+            if os.path.exists(target_arg):
+                task = asyncio.create_task(connect_with_retry(endpoint_url, target_arg))
+                running_tasks[task_key] = task
+                logger.info(f"🚀 Started custom target for {endpoint_name}")
+            else:
+                logger.error("Target script not found")
+        return
+
+    # Start configured servers
+    for server in enabled_servers:
+        task_key = f"{endpoint_name}:{server}"
+        if task_key not in running_tasks or running_tasks[task_key].done():
+            task = asyncio.create_task(
+                _run_server_for_endpoint(endpoint_url, endpoint_name, server)
+            )
+            running_tasks[task_key] = task
+            logger.info(f"🚀 Started {server} for {endpoint_name}")
 
 
 async def _run_servers(target_arg: Optional[str]) -> None:
@@ -69,6 +122,9 @@ async def _run_servers(target_arg: Optional[str]) -> None:
     # Track running tasks: key = "endpoint_name:server_name", value = asyncio.Task
     running_tasks: dict[str, asyncio.Task] = {}
     
+    # Track known endpoints
+    known_endpoints: dict[str, str] = {}  # name -> url
+    
     # Load MCP servers config and track modification time for hot-reloading
     cfg = load_config()
     config_mtime = get_config_mtime()
@@ -76,7 +132,6 @@ async def _run_servers(target_arg: Optional[str]) -> None:
     
     if disabled:
         logger.info(f"Skipping disabled servers: {', '.join(disabled)}")
-        # Clean up cache for disabled servers on startup
         for server_name in disabled:
             remove_tools_from_cache(server_name)
     
@@ -85,122 +140,121 @@ async def _run_servers(target_arg: Optional[str]) -> None:
     
     if not target_arg:
         logger.info(f"Will start servers: {', '.join(enabled)}")
-    
-    # Track known endpoints
-    known_endpoints: dict[str, str] = {}  # name -> url
-    
-    while True:
-        config_changed = False
+
+    # Callback for Ably updates
+    async def on_endpoint_update(action: str, endpoint: dict):
+        name = endpoint.get("name")
+        url = endpoint.get("url")
         
-        # Check if config file has changed (hot-reload)
-        new_mtime = get_config_mtime()
-        if new_mtime > config_mtime:
-            logger.info("🔄 Config file changed, performing hot-reload...")
-            config_mtime = new_mtime
-            cfg = load_config()
-            new_enabled, new_disabled = get_enabled_servers(cfg)
-            
-            # Log changes
-            added_servers = set(new_enabled) - set(enabled)
-            removed_servers = set(enabled) - set(new_enabled)
-            
-            if added_servers:
-                logger.info(f"➕ New servers: {', '.join(added_servers)}")
-            if removed_servers:
-                logger.info(f"➖ Servers removed/disabled: {', '.join(removed_servers)}")
-            
-            # Cancel tasks for removed/disabled servers
-            tasks_to_cancel = []
-            for task_key, task in list(running_tasks.items()):
-                # task_key format: "endpoint_name:server_name"
-                parts = task_key.split(":", 1)
-                if len(parts) == 2:
-                    server_name = parts[1]
-                    if server_name in removed_servers:
-                        tasks_to_cancel.append((task_key, task))
-            
-            for task_key, task in tasks_to_cancel:
-                logger.info(f"🛑 Stopping: {task_key}")
-                task.cancel()
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
-                del running_tasks[task_key]
-            
-            # Remove tools from cache for disabled servers
-            for server_name in removed_servers:
-                remove_tools_from_cache(server_name)
-            
-            enabled = new_enabled
-            disabled = new_disabled
-            config_changed = True
-            
-            if new_disabled:
-                logger.info(f"Skipping disabled servers: {', '.join(new_disabled)}")
-            if enabled:
-                logger.info(f"✅ Active servers: {', '.join(enabled)}")
-        
-        # Get current endpoints from database
-        endpoints = get_all_endpoint_urls()
-        
-        if not endpoints:
-            # Wait for endpoints to be added
-            endpoints = await _wait_for_endpoints()
-        
-        # Build current endpoint map
-        current_endpoints = {ep["name"]: ep["url"] for ep in endpoints}
-        
-        # Find new endpoints or endpoints that need server updates
-        for endpoint in endpoints:
-            endpoint_name = endpoint["name"]
-            endpoint_url = endpoint["url"]
-            
-            is_new_endpoint = endpoint_name not in known_endpoints
-            
-            if is_new_endpoint:
-                known_endpoints[endpoint_name] = endpoint_url
-                logger.info(f"📡 New endpoint: {endpoint_name} -> {endpoint_url}")
-            
-            # Start servers for new endpoints OR start newly added servers for existing endpoints
-            if not target_arg:
-                for server in enabled:
-                    task_key = f"{endpoint_name}:{server}"
-                    
-                    # Start task if not already running
-                    if task_key not in running_tasks or running_tasks[task_key].done():
-                        task = asyncio.create_task(
-                            _run_server_for_endpoint(endpoint_url, endpoint_name, server)
-                        )
-                        running_tasks[task_key] = task
-                        if not is_new_endpoint and config_changed:
-                            logger.info(f"🚀 Starting: {task_key}")
+        if not name:
+            return
+
+        if action == "CONNECT":
+            logger.info(f"🔔 Ably Connect: {name}")
+            if name in known_endpoints:
+                # Already connected, check if URL changed
+                if known_endpoints[name] != url:
+                    await _stop_endpoint(name, running_tasks, known_endpoints)
+                    await _start_endpoint(name, url, running_tasks, known_endpoints, enabled, target_arg)
             else:
-                # Run specific target
-                task_key = f"{endpoint_name}:custom"
-                if task_key not in running_tasks or running_tasks[task_key].done():
-                    if os.path.exists(target_arg):
-                        task = asyncio.create_task(connect_with_retry(endpoint_url, target_arg))
-                        running_tasks[task_key] = task
-                    else:
-                        logger.error(
-                            "Argument must be a local Python script path. "
-                            "To run configured servers, run without arguments."
-                        )
-                        sys.exit(1)
-        
-        # Clean up completed/failed tasks
-        for task_key in list(running_tasks.keys()):
-            if running_tasks[task_key].done():
-                # Check if it failed
-                try:
-                    running_tasks[task_key].result()
-                except Exception as e:
-                    logger.warning(f"Task {task_key} failed: {e}")
-                del running_tasks[task_key]
-        
-        # Wait a bit before checking again
-        await asyncio.sleep(ENDPOINT_POLL_INTERVAL)
+                await _start_endpoint(name, url, running_tasks, known_endpoints, enabled, target_arg)
+                
+        elif action == "DISCONNECT":
+            logger.info(f"🔔 Ably Disconnect: {name}")
+            await _stop_endpoint(name, running_tasks, known_endpoints)
+            
+        elif action == "UPDATE":
+            logger.info(f"🔔 Ably Update: {name}")
+            # Restart if connected
+            if name in known_endpoints:
+                await _stop_endpoint(name, running_tasks, known_endpoints)
+            await _start_endpoint(name, url, running_tasks, known_endpoints, enabled, target_arg)
+
+    # Start Ably Listener
+    ably_listener = AblyListener(on_endpoint_update)
+    await ably_listener.start()
+
+    # Initial Sync with DB
+    endpoints = get_all_endpoint_urls()
+    if endpoints:
+        logger.info(f"Initial sync: Found {len(endpoints)} endpoints")
+        for ep in endpoints:
+            await _start_endpoint(ep["name"], ep["url"], running_tasks, known_endpoints, enabled, target_arg)
+    else:
+        logger.info("No endpoints found in initial sync. Waiting for Ably updates...")
+
+    # Main loop - only checks for config changes now
+    while True:
+        try:
+            # Check if config file has changed (hot-reload)
+            new_mtime = get_config_mtime()
+            if new_mtime > config_mtime:
+                logger.info("🔄 Config file changed, performing hot-reload...")
+                config_mtime = new_mtime
+                cfg = load_config()
+                new_enabled, new_disabled = get_enabled_servers(cfg)
+                
+                # Log changes
+                added_servers = set(new_enabled) - set(enabled)
+                removed_servers = set(enabled) - set(new_enabled)
+                
+                if added_servers:
+                    logger.info(f"➕ New servers: {', '.join(added_servers)}")
+                if removed_servers:
+                    logger.info(f"➖ Servers removed/disabled: {', '.join(removed_servers)}")
+                
+                # Cancel tasks for removed/disabled servers
+                tasks_to_cancel = []
+                for task_key, task in list(running_tasks.items()):
+                    # task_key format: "endpoint_name:server_name"
+                    parts = task_key.split(":", 1)
+                    if len(parts) == 2:
+                        server_name = parts[1]
+                        if server_name in removed_servers:
+                            tasks_to_cancel.append((task_key, task))
+                
+                for task_key, task in tasks_to_cancel:
+                    logger.info(f"🛑 Stopping: {task_key}")
+                    task.cancel()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
+                    del running_tasks[task_key]
+                
+                # Remove tools from cache for disabled servers
+                for server_name in removed_servers:
+                    remove_tools_from_cache(server_name)
+                
+                enabled = new_enabled
+                # Start new servers for ALL known endpoints
+                if added_servers and not target_arg:
+                    for ep_name, ep_url in known_endpoints.items():
+                        for server in added_servers:
+                             task_key = f"{ep_name}:{server}"
+                             if task_key not in running_tasks:
+                                task = asyncio.create_task(
+                                    _run_server_for_endpoint(ep_url, ep_name, server)
+                                )
+                                running_tasks[task_key] = task
+                                logger.info(f"🚀 Starting new server {server} for {ep_name}")
+
+            # Clean up completed/failed tasks
+            for task_key in list(running_tasks.keys()):
+                if running_tasks[task_key].done():
+                    # Check if it failed
+                    try:
+                        running_tasks[task_key].result()
+                    except Exception as e:
+                        logger.warning(f"Task {task_key} failed: {e}")
+                    del running_tasks[task_key]
+            
+            # Wait a bit
+            await asyncio.sleep(ENDPOINT_POLL_INTERVAL)
+            
+        except Exception as e:
+            logger.error(f"Error in main loop: {e}")
+            await asyncio.sleep(ENDPOINT_POLL_INTERVAL)
 
 
 def main() -> None:

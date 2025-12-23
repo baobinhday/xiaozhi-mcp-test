@@ -2,11 +2,12 @@
  * Tab Management Module
  * Handles tab switching between Tools and Chat views
  */
+import { elements } from './state.js';
 
 // ============================================
 // Tab Initialization
 // ============================================
-function initTabHandler() {
+export function initTabHandler() {
   elements.tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const tabName = btn.dataset.tab;
@@ -18,7 +19,7 @@ function initTabHandler() {
 // ============================================
 // Tab Switching
 // ============================================
-function switchTab(tabName) {
+export function switchTab(tabName) {
   elements.tabBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
   });

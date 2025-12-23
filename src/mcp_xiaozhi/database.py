@@ -52,6 +52,9 @@ def init_db() -> None:
                 name TEXT NOT NULL UNIQUE,
                 url TEXT NOT NULL,
                 enabled INTEGER DEFAULT 1,
+                connection_status TEXT DEFAULT 'disconnected',
+                last_connected_at TEXT,
+                connection_error TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
@@ -73,6 +76,9 @@ def init_db() -> None:
         
         conn.commit()
         
+        # Migrate existing databases to add new columns
+        _migrate_add_status_columns(cursor, conn)
+        
         # Only log once
         if not _db_initialized:
             logger.info(f"Database initialized at {DB_PATH}")
@@ -82,6 +88,24 @@ def init_db() -> None:
             _migrate_tools_config_from_json()
     finally:
         conn.close()
+
+
+def _migrate_add_status_columns(cursor: sqlite3.Cursor, conn: sqlite3.Connection) -> None:
+    """Add connection status columns to existing mcp_endpoints table (migration)."""
+    try:
+        # Check if connection_status column exists
+        cursor.execute("PRAGMA table_info(mcp_endpoints)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if 'connection_status' not in columns:
+            logger.info("Migrating database: adding connection status columns")
+            cursor.execute("ALTER TABLE mcp_endpoints ADD COLUMN connection_status TEXT DEFAULT 'disconnected'")
+            cursor.execute("ALTER TABLE mcp_endpoints ADD COLUMN last_connected_at TEXT")
+            cursor.execute("ALTER TABLE mcp_endpoints ADD COLUMN connection_error TEXT")
+            conn.commit()
+            logger.info("Migration complete: connection status columns added")
+    except Exception as e:
+        logger.error(f"Failed to migrate database: {e}")
 
 
 def _migrate_tools_config_from_json() -> None:
@@ -259,6 +283,12 @@ def update_endpoint(
         if enabled is not None:
             updates.append("enabled = ?")
             params.append(1 if enabled else 0)
+            # When disabling an endpoint, reset connection status to 'disconnected'
+            if not enabled:
+                updates.append("connection_status = ?")
+                params.append("disconnected")
+                updates.append("connection_error = ?")
+                params.append(None)
         
         if updates:
             updates.append("updated_at = ?")
@@ -308,6 +338,77 @@ def endpoint_count() -> int:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM mcp_endpoints")
         return cursor.fetchone()[0]
+    finally:
+        conn.close()
+
+
+def update_endpoint_status(
+    endpoint_id: int,
+    status: str,
+    error: Optional[str] = None
+) -> bool:
+    """Update connection status for an endpoint.
+    
+    Args:
+        endpoint_id: The endpoint ID to update
+        status: Connection status ('disconnected', 'connecting', 'connected', 'error')
+        error: Error message if status is 'error'
+        
+    Returns:
+        True if update succeeded, False otherwise
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+        
+        if status == 'connected':
+            # Update status and set last_connected_at, clear error
+            cursor.execute("""
+                UPDATE mcp_endpoints 
+                SET connection_status = ?, 
+                    last_connected_at = ?,
+                    connection_error = NULL,
+                    updated_at = ?
+                WHERE id = ?
+            """, (status, now, now, endpoint_id))
+        else:
+            # Update status and optionally set error
+            cursor.execute("""
+                UPDATE mcp_endpoints 
+                SET connection_status = ?, 
+                    connection_error = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (status, error, now, endpoint_id))
+        
+        conn.commit()
+        updated = cursor.rowcount > 0
+        if updated:
+            logger.debug(f"Endpoint {endpoint_id} status updated to '{status}'")
+        return updated
+    except Exception as e:
+        logger.error(f"Failed to update endpoint status: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_endpoint_by_name(name: str) -> Optional[Dict[str, Any]]:
+    """Get a single endpoint by name.
+    
+    Args:
+        name: The endpoint name
+        
+    Returns:
+        Endpoint dictionary or None if not found
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM mcp_endpoints WHERE name = ?", (name,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
     finally:
         conn.close()
 

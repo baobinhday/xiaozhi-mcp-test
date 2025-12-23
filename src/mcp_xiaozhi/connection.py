@@ -18,13 +18,16 @@ from .server_builder import build_server_command
 logger = logging.getLogger("MCP_PIPE")
 
 
-async def connect_with_retry(uri: str, target: str) -> None:
+async def connect_with_retry(uri: str, target: str, endpoint_id: Optional[int] = None) -> None:
     """Connect to WebSocket server with retry mechanism.
 
     Args:
         uri: WebSocket endpoint URI
         target: Server target name
+        endpoint_id: Optional endpoint ID for status tracking
     """
+    from .database import update_endpoint_status
+    
     reconnect_attempt = 0
     backoff = INITIAL_BACKOFF
 
@@ -35,29 +38,53 @@ async def connect_with_retry(uri: str, target: str) -> None:
                     f"[{target}] Waiting {backoff}s before reconnection "
                     f"attempt {reconnect_attempt}..."
                 )
+                # Set status to disconnected while waiting
+                if endpoint_id:
+                    update_endpoint_status(endpoint_id, 'disconnected')
                 await asyncio.sleep(backoff)
 
             # Attempt to connect
-            await connect_to_server(uri, target)
+            await connect_to_server(uri, target, endpoint_id)
 
         except Exception as e:
+            error_msg = str(e)
             reconnect_attempt += 1
+            
+            # Check if this is an authentication error (4001)
+            # Don't retry auth errors - they require configuration fix
+            if "4001" in error_msg or "Invalid or missing token" in error_msg:
+                logger.error(
+                    f"[{target}] Authentication failed - invalid or missing token. "
+                    f"Please check endpoint URL token matches MCP_WS_TOKEN in web server."
+                )
+                if endpoint_id:
+                    update_endpoint_status(endpoint_id, 'error', 'Authentication failed - invalid token')
+                # Raise to stop this connection task
+                raise RuntimeError(f"[{target}] Authentication failed - stopping retry") from e
+            
             logger.warning(
                 f"[{target}] Connection closed (attempt {reconnect_attempt}): {e}"
             )
+            # Set error status
+            if endpoint_id:
+                update_endpoint_status(endpoint_id, 'error', str(e))
             # Calculate wait time for next reconnection (exponential backoff)
             backoff = min(backoff * 2, MAX_BACKOFF)
 
 
 from urllib.parse import urlparse
+import os
 
-async def connect_to_server(uri: str, target: str) -> None:
+async def connect_to_server(uri: str, target: str, endpoint_id: Optional[int] = None) -> None:
     """Connect to WebSocket server and pipe stdio.
 
     Args:
         uri: WebSocket endpoint URI
         target: Server target name
+        endpoint_id: Optional endpoint ID for status tracking
     """
+    from .database import update_endpoint_status
+    
     process: Optional[subprocess.Popen] = None
 
     try:
@@ -68,8 +95,12 @@ async def connect_to_server(uri: str, target: str) -> None:
             uri = uri.rstrip("/") + "/mcp"
 
         logger.info(f"[{target}] Connecting to WebSocket server...")
+        
+        # Set status to connecting
+        if endpoint_id:
+            update_endpoint_status(endpoint_id, 'connecting')
 
-        # Add server name to URI for hub identification
+        # Build WebSocket URI with server name for hub identification
         ws_uri = (
             f"{uri}?server={target}"
             if "?" not in uri
@@ -78,6 +109,10 @@ async def connect_to_server(uri: str, target: str) -> None:
 
         async with websockets.connect(ws_uri) as websocket:
             logger.info(f"[{target}] Successfully connected to WebSocket server")
+            
+            # Set status to connected
+            if endpoint_id:
+                update_endpoint_status(endpoint_id, 'connected')
 
             # Start server process (built from CLI arg or config)
             cmd, env = build_server_command(target)
@@ -101,10 +136,14 @@ async def connect_to_server(uri: str, target: str) -> None:
 
     except websockets.exceptions.ConnectionClosed as e:
         logger.error(f"[{target}] WebSocket connection closed: {e}")
+        if endpoint_id:
+            update_endpoint_status(endpoint_id, 'disconnected')
         raise  # Re-throw exception to trigger reconnection
 
     except Exception as e:
         logger.error(f"[{target}] Connection error: {e}")
+        if endpoint_id:
+            update_endpoint_status(endpoint_id, 'error', str(e))
         raise  # Re-throw exception
 
     finally:

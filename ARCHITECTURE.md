@@ -4,103 +4,150 @@ This file provides guidance to anyone when working with code in this repository.
 
 ## Project Overview
 
-MCP Xiaozhi is a WebSocket-to-stdio bridge for integrating Python-based MCP (Model Context Protocol) tools with remote systems. It manages communication between local MCP servers and WebSocket endpoints through a central hub.
+MCP Xiaozhi is a **distributed WebSocket-to-stdio bridge** for integrating Python-based MCP (Model Context Protocol) tools with multiple remote Web Hubs. The system supports **multiple Web Hub instances** running on different servers, with a centralized CMS managing all endpoint URLs and an MCP Pipe that connects to all configured hubs simultaneously.
 
 ## Architecture
 
-### Three Main Components
+### Three Main Components (Distributed Design)
 
 The system consists of three independent components with **clear separation of concerns**:
 
-| Component | Port | Purpose | Connects to Hub? |
-|-----------|------|---------|------------------|
-| **Web Hub** (`web/`) | 8888 (HTTP), 8889 (WS) | Runtime - serves browser UI & manages tool execution | N/A (IS the hub) |
-| **Web CMS** (`web-cms/`) | 8890 | Admin - configuration management only | ❌ **NO** |
-| **MCP Pipe** (`mcp_pipe.py`) | N/A (client) | Bridge - connects MCP servers to hub | ✅ Yes |
+| Component | Deployment | Purpose | Connects to Hub? |
+|-----------|------------|---------|------------------|
+| **Web Hub** (`web/`) | **Multiple servers** (each on port 8888/8889) | Runtime - serves browser UI & manages tool execution | N/A (IS the hub) |
+| **Web CMS** (`web-cms/`) | Single instance (port 8890) | Admin - manages **all Web Hub endpoint URLs** | ❌ **NO** |
+| **MCP Pipe** (`mcp_pipe.py`) | Single instance | Bridge - connects to **ALL Web Hub endpoints** | ✅ Yes (multiple) |
 
 ### Component Details
 
-#### 1. Web Hub (`web/server.py`) - Runtime Layer
-- **Role**: Central WebSocket hub for tool execution
+#### 1. Web Hub (`web/server.py`) - Runtime Layer (Multiple Instances)
+- **Role**: WebSocket hub instance that provides tool testing interface
+- **Deployment**: **Multiple independent instances** can run on different servers
 - **Features**:
-  - Serves browser-based MCP Tools Tester UI
+  - **Creates WebSocket endpoint URL** (e.g., ws://server1.example.com:8889, ws://server2.example.com:8889)
+  - Serves browser-based **Web UI to test all tools** retrieved from MCP Pipe (after WebSocket connection)
   - Manages WebSocket connections between browser clients and MCP tools
-  - Aggregates tools from multiple MCP servers
+  - Aggregates tools from multiple MCP servers via MCP Pipe
   - Forwards tool requests and returns results
-- **Users**: End users testing/using MCP tools
+- **Users**: End users testing/using MCP tools via the browser UI
+- **Note**: Each Web Hub instance is independent; users connect to their nearest/assigned hub
 
-#### 2. Web CMS (`web-cms/server.py`) - Configuration Layer
-- **Role**: Admin panel for managing configuration files
-- **Important**: The CMS **NEVER** connects to the Hub - it only manages files!
+#### 2. Web CMS (`web-cms/server.py`) - Configuration Layer (Single Instance)
+- **Role**: Centralized admin panel for managing **all Web Hub endpoint URLs** and configurations
+- **Deployment**: **Single instance** managing the entire distributed system
+- **Important**: The CMS **NEVER** connects to the Hubs - it only manages configuration files!
 - **Manages**:
-  - `data/app.db` - WebSocket endpoint URLs + tool settings (enable/disable, custom names)
+  - `data/app.db` - **Multiple WebSocket endpoint URLs** from different Web Hub servers + tool settings (enable/disable, custom names)
   - `data/mcp_config.json` - MCP server definitions
   - `data/tools_cache.json` - Cached tool list from bridge (read-only)
 - **Features**:
-  - CRUD for endpoints and MCP servers
-  - Enable/disable individual tools
-  - Custom tool names/descriptions
+  - **Add/Edit/Delete WebSocket endpoint URLs** for multiple Web Hubs (e.g., ws://server1:8889, ws://server2:8889)
+  - CRUD for MCP server configurations
+  - Enable/disable individual tools (applies to ALL hubs)
+  - Custom tool names/descriptions (applies to ALL hubs)
   - Backup/restore for all configs
-- **Users**: Administrators configuring the system
+- **Users**: System administrators managing the distributed infrastructure
 
-#### 3. MCP Pipe (`mcp_pipe.py` → `src/mcp_xiaozhi/`) - Bridge Layer
-- **Role**: WebSocket-to-stdio bridge connecting MCP servers to the hub
+#### 3. MCP Pipe (`mcp_pipe.py` → `src/mcp_xiaozhi/`) - Bridge Layer (Single Instance)
+- **Role**: WebSocket-to-stdio bridge that connects MCP servers to **ALL Web Hub endpoints simultaneously**
+- **Deployment**: **Single instance** broadcasting to all configured Web Hubs
 - **Features**:
-  - Reads config files that CMS manages
+  - Reads config files that CMS manages (endpoints, MCP servers, tool settings)
+  - **Connects to MULTIPLE Web Hub endpoints** via WebSocket (using all URLs from `app.db`)
   - Spawns MCP server subprocesses
   - Pipes messages between WebSocket and subprocess stdio
-  - Hot-reloads when config changes
+  - **Broadcasts tools to ALL connected Web Hubs**
+  - Hot-reloads when config changes (including endpoint list changes)
   - Filters tools based on tool settings in `app.db`
   - Writes `tools_cache.json` for CMS to read
+  - **Provides all tools to EVERY Web Hub** for browser-based testing
 - **Users**: The system (runs as a background process)
+- **Note**: Single source of truth for all MCP tools across the distributed system
 
-### Data Flow Diagram
+### Data Flow Diagram (Distributed Architecture)
 
 ```
-                        ┌─────────────────────────────────────────────────────────┐
-                        │                    CONFIG FILES                         │
-                        │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐ │
-                        │  │  app.db (endpoints + tool settings)  │ │mcp_config.json│ │
-                        │  └──────┬───────┘ └──────┬───────┘ └────────┬─────────┘ │
-                        │         │                │                   │          │
-                        └─────────┼────────────────┼───────────────────┼──────────┘
-                                  │                │                   │
-                    ┌─────────────┴────────────────┴───────────────────┴───────────┐
-                    │                                                              │
-         Writes ◄───┤                      web-cms/                                │
-         Reads  ───►│                    (Admin Panel)                             │
-                    │                     Port 8890                                │
-                    └──────────────────────────────────────────────────────────────┘
-                                                    ▲
-                                                    │ (NO connection)
-                                                    ✗
-                                                    
-                    ┌──────────────────────────────────────────────────────────────┐
-                    │                                                              │
-         Reads  ───►│                      mcp_pipe.py                             │
-                    │                    (Bridge Layer)                            │
-                    │                                                              │
-                    └─────────────────────────────┬────────────────────────────────┘
+                        ┌──────────────────────────────────────────────────────────────┐
+                        │                     CONFIG FILES                             │
+                        │  ┌─────────────────────────────────────────────────────────┐ │
+                        │  │ app.db: Multiple endpoint URLs + tool settings          │ │
+                        │  │ • ws://hub1.example.com:8889                            │ │
+                        │  │ • ws://hub2.example.com:8889                            │ │
+                        │  │ • ws://localhost:8889 (dev)                             │ │
+                        │  └──────────────────────┬──────────────────────────────────┘ │
+                        │  ┌──────────────────────┴──────────────────────────────────┐ │
+                        │  │ mcp_config.json: MCP server definitions                 │ │
+                        │  └──────────────────────┬──────────────────────────────────┘ │
+                        └─────────────────────────┼─────────────────────────────────────┘
                                                   │
-                                                  │ WebSocket
+                    ┌─────────────────────────────┴─────────────────────────────────┐
+                    │                      web-cms/                                 │
+                    │         Centralized Admin Panel (Single Instance)             │
+         Writes ◄───┤              Port 8890                                        │
+         Reads  ───►│    • Manages ALL Web Hub endpoint URLs                        │
+                    │    • Manages MCP server configs                               │
+                    └───────────────────────────────────────────────────────────────┘
+                                                  ▲
+                                                  │ Config only (no WS connection)
                                                   ▼
-┌───────────────┐                    ┌─────────────────────────┐                    ┌───────────────┐
-│               │     WebSocket      │                         │       stdio        │               │
-│   Browser     │◄──────────────────►│        web/             │◄──────────────────►│  MCP Servers  │
-│   (User UI)   │                    │   (WebSocket Hub)       │   (via mcp_pipe)   │  (FastMCP)    │
-│               │                    │   Port 8888/8889        │                    │               │
-└───────────────┘                    └─────────────────────────┘                    └───────────────┘
+                    ┌───────────────────────────────────────────────────────────────┐
+                    │                      mcp_pipe.py                              │
+         Reads  ───►│         Bridge Layer (Single Instance)                        │
+                    │    • Reads all endpoint URLs from app.db                      │
+                    │    • Spawns MCP servers                                       │
+                    └──────────┬──────────────────┬──────────────────┬──────────────┘
+                               │                  │                  │
+                        WebSocket (1)      WebSocket (2)      WebSocket (3)
+                               │                  │                  │
+           ┌───────────────────▼──────┐  ┌────────▼──────┐  ┌───────▼──────────────┐
+           │  Web Hub Instance 1      │  │ Web Hub #2    │  │  Web Hub Instance N  │
+           │  (Server 1)              │  │ (Server 2)    │  │  (Server N)          │
+           │  ws://hub1:8889          │  │ ws://hub2:    │  │  ws://hubN:8889      │
+           │  Port 8888/8889          │  │ 8889          │  │  Port 8888/8889      │
+           └──────────┬───────────────┘  └───────┬───────┘  └──────────┬───────────┘
+                      │                          │                     │
+              ┌───────▼──────┐          ┌────────▼──────┐      ┌───────▼──────┐
+              │ Browser UI 1 │          │ Browser UI 2  │      │ Browser UI N │
+              │ (Region 1)   │          │ (Region 2)    │      │ (Region N)   │
+              └──────────────┘          └───────────────┘      └──────────────┘
+                        
+                                    ▲
+                                    │
+                            All hubs receive
+                        the same MCP tools from
+                          single mcp_pipe instance
 ```
 
-### Data Flow Steps
+### Data Flow Steps (Distributed)
 
-1. **Admin configures** via CMS → writes to config files
-2. **mcp_pipe.py reads** config files (endpoints, MCP servers, tool filters)
-3. **mcp_pipe.py connects** to Hub via WebSocket
-4. **mcp_pipe.py spawns** MCP server subprocesses
-5. **Browser connects** to Hub via WebSocket
-6. **Hub forwards** tool requests from browser → mcp_pipe → MCP server
-7. **Hub returns** results from MCP server → mcp_pipe → browser
+1. **Admin configures** via CMS → writes multiple endpoint URLs to `app.db`
+2. **mcp_pipe.py reads** config files (ALL endpoint URLs, MCP servers, tool filters)
+3. **mcp_pipe.py connects** to ALL Web Hub endpoints via WebSocket simultaneously
+4. **mcp_pipe.py spawns** MCP server subprocesses (once for all hubs)
+5. **mcp_pipe.py broadcasts** available tools to ALL connected Web Hubs
+6. **Browsers connect** to their assigned/nearest Web Hub via WebSocket
+7. **Web Hub forwards** tool requests from browser → mcp_pipe → MCP server
+8. **mcp_pipe returns** results to the requesting Web Hub → browser
+9. **Config changes** (add/remove endpoints) trigger reconnection to new endpoint list
+
+### Real-Time Updates with Ably
+
+The system uses **Ably** (a real-time pub/sub service) to enable instant communication between the CMS and MCP Pipe, eliminating the need for polling:
+
+```
+┌─────────────┐       ┌───────────────┐       ┌─────────────────┐
+│   Web CMS   │──────▶│     Ably      │──────▶│   mcp_pipe.py   │
+│ (Publisher) │       │ (Pub/Sub Hub) │       │  (Subscriber)   │
+└─────────────┘       └───────────────┘       └─────────────────┘
+```
+
+| Event | Trigger | Action |
+|-------|---------|--------|
+| `CONNECT` | Endpoint enabled/created | MCP Pipe starts connection to endpoint |
+| `DISCONNECT` | Endpoint disabled/deleted | MCP Pipe stops connection |
+| `UPDATE` | Endpoint URL changed | MCP Pipe reconnects with new URL |
+
+**Configuration**: Set `ABLY_API_KEY` in `.env` to enable real-time updates.
 
 ### Core Package (`src/mcp_xiaozhi/`)
 
@@ -271,6 +318,7 @@ Default credentials: `admin` / `changeme` (configure via `CMS_USERNAME`, `CMS_PA
 │   ├── connection.py         # WebSocket handling
 │   ├── pipe.py               # I/O piping
 │   ├── server_builder.py     # Command building
+│   ├── ably_listener.py      # Ably real-time subscriber
 │   └── utils.py              # Utilities
 ├── tools/                    # Tool implementations
 │   ├── math_tools.py
