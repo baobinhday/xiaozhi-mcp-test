@@ -1,12 +1,6 @@
-/**
- * Text-to-Speech Module
- * Custom TTS API integration for audio playback
- */
-
-// ============================================
-// Configuration
-// ============================================
-const TTS_API_URL = 'https://ttsapi.site/v1/audio/speech';
+import { log } from './ui-utils.js';
+import { fetchTtsApiVoices, generateTtsApiAudio } from './ttsapi-tts.js';
+import { listVoicesApi as fetchEdgeTtsVoices, generateEdgeAudio } from '../libs/edge-tts.js';
 
 // ============================================
 // State
@@ -15,23 +9,66 @@ let currentAudio = null;
 let currentSpeakingButton = null;
 let selectedVoice = 'alloy';
 
+// TTS Provider: 'ttsapi' or 'edge-tts'
+let ttsProvider = 'ttsapi';
+
 // Available voices from the API (loaded dynamically)
 let availableVoices = [];
+let edgeTtsVoices = [];
+
+// ============================================
+// TTS Provider Management
+// ============================================
+
+export function getTtsProvider() {
+  return ttsProvider;
+}
+
+export function setTtsProvider(provider) {
+  if (provider === 'ttsapi' || provider === 'edge-tts') {
+    ttsProvider = provider;
+    log('info', `TTS provider set to: ${provider}`);
+
+    // Update voice dropdown with the correct voices
+    const voiceSelect = document.getElementById('voiceSelect');
+    if (voiceSelect) {
+      voiceSelect.innerHTML = getVoiceOptionsHtml();
+    }
+
+    // Update all voice selects in chat
+    document.querySelectorAll('.tts-voice-select').forEach(select => {
+      select.innerHTML = getVoiceOptionsHtml();
+    });
+  }
+}
 
 // ============================================
 // Voice Fetching
 // ============================================
-const TTS_VOICES_API_URL = 'https://ttsapi.site/api/voices';
 
-async function fetchVoices() {
+export async function fetchVoices() {
   try {
-    const response = await fetch(TTS_VOICES_API_URL);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch voices: ${response.status}`);
+    // Fetch voices from both providers
+    const [ttsApiVoicesResult, edgeTtsVoicesResult] = await Promise.allSettled([
+      fetchTtsApiVoices(),
+      fetchEdgeTtsVoices()
+    ]);
+
+    if (ttsApiVoicesResult.status === 'fulfilled') {
+      availableVoices = ttsApiVoicesResult.value;
+      log('info', `Loaded ${availableVoices.length} TTS API voices`);
+    } else {
+      log('warning', `Failed to fetch TTS API voices: ${ttsApiVoicesResult.reason}`);
+      availableVoices = [{ id: 'alloy', name: 'Alloy', description: 'Default voice' }];
     }
-    const data = await response.json();
-    availableVoices = data.voices || [];
-    log('info', `Loaded ${availableVoices.length} TTS voices`);
+
+    if (edgeTtsVoicesResult.status === 'fulfilled') {
+      edgeTtsVoices = edgeTtsVoicesResult.value;
+      log('info', `Loaded ${edgeTtsVoices.length} Edge TTS voices`);
+    } else {
+      log('warning', `Failed to fetch Edge TTS voices: ${edgeTtsVoicesResult.reason}`);
+      edgeTtsVoices = [{ id: 'en-US-AriaNeural', name: 'en-US-AriaNeural', description: 'Default Edge voice' }];
+    }
 
     // Update voice dropdown if it exists
     const voiceSelect = document.getElementById('voiceSelect');
@@ -39,11 +76,11 @@ async function fetchVoices() {
       voiceSelect.innerHTML = getVoiceOptionsHtml();
     }
 
-    return availableVoices;
+    return ttsProvider === 'edge-tts' ? edgeTtsVoices : availableVoices;
   } catch (error) {
     log('error', `Failed to fetch TTS voices: ${error.message}`);
-    // Fallback to default voice
     availableVoices = [{ id: 'alloy', name: 'Alloy', description: 'Default voice' }];
+    edgeTtsVoices = [{ id: 'en-US-AriaNeural', name: 'en-US-AriaNeural', description: 'Default Edge voice' }];
     return availableVoices;
   }
 }
@@ -51,25 +88,34 @@ async function fetchVoices() {
 // ============================================
 // Voice Selection
 // ============================================
-function setTtsVoice(voiceId) {
+export function setTtsVoice(voiceId) {
   selectedVoice = voiceId;
   log('info', `TTS voice set to: ${voiceId}`);
 }
 
-function getVoiceOptionsHtml() {
-  if (availableVoices.length === 0) {
+export function getVoiceOptionsHtml() {
+  const voices = ttsProvider === 'edge-tts' ? edgeTtsVoices : availableVoices;
+
+  if (voices.length === 0) {
     return '<option value="alloy">Loading voices...</option>';
   }
-  return availableVoices.map(voice => {
+  return voices.map(voice => {
     const isSelected = voice.id === selectedVoice;
     return `<option value="${voice.id}" ${isSelected ? 'selected' : ''}>${voice.name}</option>`;
   }).join('');
 }
 
+export function getTtsProviderOptionsHtml() {
+  return `
+    <option value="ttsapi" ${ttsProvider === 'ttsapi' ? 'selected' : ''}>TTS API</option>
+    <option value="edge-tts" ${ttsProvider === 'edge-tts' ? 'selected' : ''}>Edge TTS</option>
+  `;
+}
+
 // ============================================
 // Speech Playback
 // ============================================
-async function speakText(text, button) {
+export async function speakText(text, button) {
   // If already playing, stop it
   if (currentAudio && currentSpeakingButton === button) {
     currentAudio.pause();
@@ -94,26 +140,15 @@ async function speakText(text, button) {
   currentSpeakingButton = button;
 
   try {
-    const response = await fetch(TTS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini-tts',
-        input: text,
-        voice: selectedVoice,
-        response_format: 'mp3', // "mp3", "wav", "opus", "aac", "flac", "pcm"
-        speed: 1.0
-      })
-    });
+    let audioBlob;
 
-    if (!response.ok) {
-      throw new Error(`TTS API error: ${response.status}`);
+    if (ttsProvider === 'edge-tts') {
+      audioBlob = await generateEdgeAudio(text, selectedVoice);
+    } else {
+      audioBlob = await generateTtsApiAudio(text, selectedVoice);
     }
 
     // Get audio blob and create URL
-    const audioBlob = await response.blob();
     const audioUrl = URL.createObjectURL(audioBlob);
 
     // Create and play audio
@@ -152,7 +187,7 @@ async function speakText(text, button) {
 // ============================================
 // Button State Management
 // ============================================
-function setSpeakButtonLoading(button) {
+export function setSpeakButtonLoading(button) {
   button.innerHTML = `
     <svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
@@ -163,7 +198,7 @@ function setSpeakButtonLoading(button) {
   button.title = 'Loading...';
 }
 
-function setSpeakButtonPlaying(button) {
+export function setSpeakButtonPlaying(button) {
   button.innerHTML = `
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
       <rect x="6" y="5" width="4" height="14" rx="1"/>
@@ -175,7 +210,7 @@ function setSpeakButtonPlaying(button) {
   button.title = 'Stop speaking';
 }
 
-function resetSpeakButton(button) {
+export function resetSpeakButton(button) {
   button.innerHTML = `
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
       <path d="M8 5v14l11-7z"/>

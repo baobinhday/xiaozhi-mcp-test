@@ -36,6 +36,14 @@ except ImportError:
     import websockets
     from websockets.server import serve as ws_serve
 
+try:
+    import edge_tts
+except ImportError:
+    import subprocess
+    print("Installing edge-tts...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "edge-tts"])
+    import edge_tts
+
 # Load environment variables
 load_dotenv(override=False)
 
@@ -690,11 +698,32 @@ def run_http_server():
                     self.send_json_response({"error": str(e)}, 500)
                 return
             
+            # Edge TTS voices API (no auth required for TTS)
+            if path == "/api/edge-tts/voices":
+                try:
+                    import asyncio
+                    voices = asyncio.run(edge_tts.list_voices())
+                    # Filter for en-US and vi-VN voices
+                    filtered_voices = [
+                        {
+                            "id": v["ShortName"],
+                            "name": v["ShortName"],
+                            "description": v.get("FriendlyName", v["ShortName"])
+                        }
+                        for v in voices
+                        if "en-US" in v.get("Locale", "") or "vi-VN" in v.get("Locale", "")
+                    ]
+                    self.send_json_response({"voices": filtered_voices})
+                except Exception as e:
+                    logger.error(f"Failed to fetch Edge TTS voices: {e}")
+                    self.send_json_response({"error": str(e)}, 500)
+                return
+            
             # Protected static files - redirect to login if not authenticated
             # Allow CSS, JS, and fonts without auth for login page styling
             allowed_without_auth = [
                 '/style.css', '/common.css', '/app.js', 
-                '/js/', '/login.html'
+                '/js/', '/libs/', '/login.html'
             ]
             
             needs_auth = True
@@ -760,6 +789,40 @@ def run_http_server():
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": True}).encode())
+            
+            elif path == "/api/edge-tts/synthesize":
+                try:
+                    body = self.read_body()
+                    text = body.get("text", "")
+                    voice = body.get("voice", "en-US-AriaNeural")
+                    
+                    if not text:
+                        self.send_json_response({"error": "Text is required"}, 400)
+                        return
+                    
+                    import asyncio
+                    import io
+                    
+                    async def synthesize():
+                        communicate = edge_tts.Communicate(text, voice)
+                        audio_data = io.BytesIO()
+                        async for chunk in communicate.stream():
+                            if chunk["type"] == "audio":
+                                audio_data.write(chunk["data"])
+                        return audio_data.getvalue()
+                    
+                    audio_bytes = asyncio.run(synthesize())
+                    
+                    self.send_response(200)
+                    self.send_header("Content-Type", "audio/mpeg")
+                    self.send_header("Content-Length", str(len(audio_bytes)))
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(audio_bytes)
+                    
+                except Exception as e:
+                    logger.error(f"Edge TTS synthesis failed: {e}")
+                    self.send_json_response({"error": str(e)}, 500)
             
             else:
                 self.send_json_response({"error": "Not found"}, 404)

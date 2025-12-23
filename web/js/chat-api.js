@@ -2,6 +2,11 @@
  * Chat API Module
  * LLM chat integration with tool calling support
  */
+import { state, elements } from './state.js';
+import { log, escapeHtml, parseMarkdownToHtml, parseTextFromMarkDown, displayRequest } from './ui-utils.js';
+import { generateRequestId } from './mcp-protocol.js';
+import { openSettingsModal, initSettingsModal } from './settings.js';
+import { setTtsVoice, setTtsProvider, getVoiceOptionsHtml, getTtsProviderOptionsHtml, speakText } from './tts.js';
 
 // ============================================
 // Text Cleaning Utilities
@@ -11,7 +16,7 @@
  * @param {string} text - The text to clean
  * @returns {string} - Cleaned text suitable for TTS
  */
-function cleanTextForSpeech(text) {
+export function cleanTextForSpeech(text) {
   if (!text) return '';
 
   let cleaned = text;
@@ -55,7 +60,7 @@ function cleanTextForSpeech(text) {
 // ============================================
 // Chat Handler Initialization
 // ============================================
-function initChatHandler() {
+export function initChatHandler() {
   elements.chatSendBtn.addEventListener('click', sendChatMessage);
 
   elements.chatInput.addEventListener('keydown', (e) => {
@@ -80,7 +85,7 @@ function initChatHandler() {
 // ============================================
 // Send Message
 // ============================================
-async function sendChatMessage() {
+export async function sendChatMessage() {
   const message = elements.chatInput.value.trim();
   if (!message) return;
 
@@ -115,7 +120,7 @@ async function sendChatMessage() {
 // ============================================
 // API Calls
 // ============================================
-async function callChatAPI() {
+export async function callChatAPI() {
   const { baseUrl, token, model, systemPrompt, maxHistory } = state.chatSettings;
 
   // Build messages array
@@ -170,7 +175,7 @@ async function callChatAPI() {
   }
 }
 
-async function sendChatRequest(baseUrl, token, model, messages, tools, assistantDiv) {
+export async function sendChatRequest(baseUrl, token, model, messages, tools, assistantDiv) {
   const headers = {
     'Content-Type': 'application/json'
   };
@@ -303,7 +308,7 @@ async function sendChatRequest(baseUrl, token, model, messages, tools, assistant
 // ============================================
 // Tool Execution
 // ============================================
-async function executeToolForChat(toolName, args) {
+export async function executeToolForChat(toolName, args) {
   // Use the existing MCP sendRequest function
   return new Promise((resolve, reject) => {
     if (!state.isConnected || !state.websocket) {
@@ -344,7 +349,7 @@ async function executeToolForChat(toolName, args) {
   });
 }
 
-function buildToolsForAPI() {
+export function buildToolsForAPI() {
   const { toolMode, customTools } = state.chatSettings;
 
   if (toolMode === 'custom' && customTools && customTools.length > 0) {
@@ -384,7 +389,7 @@ function buildToolsForAPI() {
 // ============================================
 // Message UI
 // ============================================
-function createAssistantMessageDiv() {
+export function createAssistantMessageDiv() {
   const emptyState = elements.chatBody.querySelector('.empty-state');
   if (emptyState) {
     emptyState.remove();
@@ -399,7 +404,7 @@ function createAssistantMessageDiv() {
   return messageDiv;
 }
 
-function updateAssistantMessage(div, content, isError = false) {
+export function updateAssistantMessage(div, content, isError = false) {
   if (isError) {
     div.className = 'chat-message-wrapper max-w-[80%] self-start';
     div.innerHTML = `
@@ -424,6 +429,9 @@ function updateAssistantMessage(div, content, isError = false) {
         <div class="markdown-content">${htmlContent}</div>
       </div>
       <div class="speak-controls">
+        <select class="tts-provider-select" onchange="setTtsProvider(this.value)" title="Select TTS provider">
+          ${getTtsProviderOptionsHtml()}
+        </select>
         <select class="tts-voice-select" onchange="setTtsVoice(this.value)" title="Select voice">
           ${getVoiceOptionsHtml()}
         </select>
@@ -500,7 +508,7 @@ function updateAssistantMessage(div, content, isError = false) {
   elements.chatBody.scrollTop = elements.chatBody.scrollHeight;
 }
 
-function addChatMessage(content, role, historyIndex = null) {
+export function addChatMessage(content, role, historyIndex = null) {
   const emptyState = elements.chatBody.querySelector('.empty-state');
   if (emptyState) {
     emptyState.remove();
@@ -552,7 +560,7 @@ function addChatMessage(content, role, historyIndex = null) {
 // ============================================
 // Regenerate Response
 // ============================================
-async function regenerateResponse(currentDiv) {
+export async function regenerateResponse(currentDiv) {
   // Prevent multiple simultaneous requests
   if (state.isGenerating) {
     log('warning', 'Please wait for the current response to complete');
@@ -613,7 +621,7 @@ async function regenerateResponse(currentDiv) {
 // ============================================
 // Edit User Message
 // ============================================
-function editUserMessage(messageWrapper) {
+export function editUserMessage(messageWrapper) {
   // Prevent editing if currently generating
   if (state.isGenerating) {
     log('warning', 'Please wait for the current response to complete');
@@ -732,7 +740,7 @@ function editUserMessage(messageWrapper) {
 // ============================================
 // Chat History
 // ============================================
-function clearChat() {
+export function clearChat() {
   state.chatHistory = [];
   elements.chatBody.innerHTML = `
     <div class="empty-state flex flex-col items-center justify-center h-full text-zinc-500 gap-4">
@@ -743,7 +751,7 @@ function clearChat() {
   log('info', 'Chat cleared');
 }
 
-function getRecentHistory(maxMessages) {
+export function getRecentHistory(maxMessages) {
   if (!maxMessages || state.chatHistory.length <= maxMessages) {
     return state.chatHistory;
   }

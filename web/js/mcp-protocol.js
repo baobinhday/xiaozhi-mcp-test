@@ -2,18 +2,22 @@
  * MCP JSON-RPC Protocol Module
  * Handles MCP protocol communication
  */
+import { state } from './state.js';
+import { log, displayResponse } from './ui-utils.js';
+import { updateConnectionUI } from './websocket.js';
+import { showNoToolsMessage, fetchTools } from './tools.js';
 
 // ============================================
 // Request ID Generation
 // ============================================
-function generateRequestId() {
+export function generateRequestId() {
   return state.requestId++;
 }
 
 // ============================================
 // Send Request
 // ============================================
-function sendRequest(method, params = {}) {
+export function sendRequest(method, params = {}) {
   if (!state.isConnected || !state.websocket) {
     log('error', 'Not connected to server');
     return Promise.reject(new Error('Not connected'));
@@ -47,7 +51,7 @@ function sendRequest(method, params = {}) {
 // ============================================
 // Handle Incoming Messages
 // ============================================
-function handleMessage(data) {
+export function handleMessage(data) {
   let message;
   try {
     message = JSON.parse(data);
@@ -95,7 +99,7 @@ function handleMessage(data) {
 // ============================================
 // Initialize MCP Session
 // ============================================
-function sendInitialize() {
+export function sendInitialize() {
   sendRequest('initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
@@ -117,7 +121,7 @@ function sendInitialize() {
 // ============================================
 // Send Notification
 // ============================================
-function sendNotification(method, params = {}) {
+export function sendNotification(method, params = {}) {
   if (!state.isConnected || !state.websocket) return;
 
   const notification = {

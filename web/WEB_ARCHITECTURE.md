@@ -28,10 +28,10 @@ The web interface is a single-page application (SPA) that provides:
 │  │  │ (Connection) │  │  (JSON-RPC)    │  │ (Tool Forms)  │  │  (Config)   │  │ │
 │  │  └──────────────┘  └────────────────┘  └───────────────┘  └─────────────┘  │ │
 │  └────────────────────────────────────────────────────────────────────────────┘ │
-│  ┌─────────────────────────────────────┐  ┌───────────────────────────────────┐ │
-│  │           chat-api.js               │  │             tts.js                │ │
-│  │  (LLM Chat + Tool Calling)          │  │    (Text-to-Speech API)           │ │
-│  └─────────────────────────────────────┘  └───────────────────────────────────┘ │
+│  ┌─────────────────────────────────────┐  ┌────────────────┐  ┌───────────────┐  │ │
+│  │           chat-api.js               │  │     tts.js     │  │ ttsapi-tts.js │  │ │
+│  │  (LLM Chat + Tool Calling)          │  │ (Audio Playback)│  │ (TTS Engine)  │  │ │
+│  └─────────────────────────────────────┘  └────────────────┘  └───────────────┘  │ │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                     ▲
                                     │ WebSocket (ws://localhost:8889)
@@ -68,7 +68,9 @@ web/
     ├── tools.js        # Tool discovery and form rendering
     ├── chat-api.js     # LLM chat integration with tool calling
     ├── settings.js     # Settings modal and configuration
-    ├── tts.js          # Text-to-Speech API integration
+    ├── tts.js          # Text-to-Speech module (UI & playback control)
+    ├── ttsapi-tts.js   # TTS API engine (ttsapi.site integration)
+    ├── edge-tts.js     # Edge TTS engine integration
     ├── tabs.js         # Tab switching (Response/Request/Chat)
     └── ui-utils.js     # UI helpers (formatting, logging, etc.)
 ```
@@ -167,15 +169,24 @@ Settings management for LLM API:
 | `fetchModels()` | Fetch available models from API |
 | `toggleCustomToolsPanel()` | Toggle custom tool selection |
 
-### `tts.js` - Text-to-Speech
+### `tts.js` - Text-to-Speech Controller
 
-Audio playback using external TTS API:
+Audio playback management and UI state:
 
 | Function | Purpose |
 |----------|---------|
-| `fetchVoices()` | Load available voices from API |
-| `speakText()` | Convert text to speech and play |
+| `fetchVoices()` | Load and aggregate voices from engines |
+| `speakText()` | Coordinate TTS generation and playback |
 | `setTtsVoice()` | Change selected voice |
+
+### `ttsapi-tts.js` - TTS API Engine
+
+Direct integration with https://ttsapi.site:
+
+| Function | Purpose |
+|----------|---------|
+| `fetchTtsApiVoices()` | Fetch voices from TTS API |
+| `generateTtsApiAudio()`| Generate audio via TTS API |
 
 ### `tabs.js` - Tab Navigation
 
@@ -271,6 +282,6 @@ Helper functions for UI rendering:
 
 | API | Endpoint | Purpose |
 |-----|----------|---------|
-| TTS API | `https://ttsapi.site/v1/audio/speech` | Text-to-Speech synthesis |
-| Voices API | `https://ttsapi.site/api/voices` | Available TTS voices list |
+| TTS API (ttsapi) | `https://ttsapi.site/v1/audio/speech` | Text-to-Speech synthesis |
+| Voices API (ttsapi) | `https://ttsapi.site/api/voices` | Available TTS voices list |
 | LLM API | Configurable (OpenAI-compatible) | Chat completions with function calling |

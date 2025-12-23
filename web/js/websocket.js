@@ -2,11 +2,15 @@
  * WebSocket Connection Module
  * Handles WebSocket connection to the MCP hub
  */
+import { state, elements } from './state.js';
+import { log } from './ui-utils.js';
+import { showNoToolsMessage } from './tools.js';
+import { handleMessage } from './mcp-protocol.js';
 
 // ============================================
 // Connection Handler
 // ============================================
-function initConnectionHandler() {
+export function initConnectionHandler() {
   // Single toggle button handler
   elements.connectionToggleBtn.addEventListener('click', toggleConnection);
 
@@ -51,7 +55,7 @@ function initConnectionHandler() {
 /**
  * Reset custom endpoint to auto-generated URL
  */
-function resetCustomEndpoint() {
+export function resetCustomEndpoint() {
   state.customEndpointUrl = null;
   const autoUrl = buildWebSocketUrl();
   elements.customEndpointUrl.value = autoUrl;
@@ -61,7 +65,7 @@ function resetCustomEndpoint() {
 /**
  * Open custom endpoint modal
  */
-function openCustomEndpointModal() {
+export function openCustomEndpointModal() {
   if (elements.customEndpointModal) {
     // Pre-fill with current endpoint URL
     const currentUrl = state.customEndpointUrl || buildWebSocketUrl();
@@ -76,7 +80,7 @@ function openCustomEndpointModal() {
 /**
  * Close custom endpoint modal
  */
-function closeCustomEndpointModal() {
+export function closeCustomEndpointModal() {
   if (elements.customEndpointModal) {
     elements.customEndpointModal.classList.add('hidden');
     elements.customEndpointModal.style.display = 'none';
@@ -86,7 +90,7 @@ function closeCustomEndpointModal() {
 /**
  * Connect to custom endpoint from modal
  */
-function connectToCustomEndpoint() {
+export function connectToCustomEndpoint() {
   const customUrl = elements.customEndpointUrl.value.trim();
   if (!customUrl) {
     log('error', 'Please enter a WebSocket URL');
@@ -114,7 +118,7 @@ function connectToCustomEndpoint() {
 /**
  * Toggle connection state
  */
-function toggleConnection() {
+export function toggleConnection() {
   if (state.isConnected) {
     disconnect();
   } else {
@@ -125,7 +129,7 @@ function toggleConnection() {
 /**
  * Copy WebSocket endpoint URL to clipboard
  */
-async function copyEndpointUrl() {
+export async function copyEndpointUrl() {
   // Use custom endpoint if set, otherwise build from host
   const baseUrl = state.customEndpointUrl || buildWebSocketUrl();
   const wsUrl = baseUrl.endsWith('/mcp') ? baseUrl : baseUrl + '/mcp';
@@ -149,7 +153,7 @@ async function copyEndpointUrl() {
  * Build WebSocket URL from current page host
  * @returns {string} WebSocket URL
  */
-function buildWebSocketUrl() {
+export function buildWebSocketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.hostname;
   // Use same port scheme: if HTTP is 8888, WS is 8889
@@ -163,7 +167,7 @@ function buildWebSocketUrl() {
  * Get session token from cookies
  * @returns {string} Session token or empty string
  */
-function getSessionToken() {
+export function getSessionToken() {
   const cookies = document.cookie.split(';');
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split('=');
@@ -172,7 +176,7 @@ function getSessionToken() {
   return '';
 }
 
-function connect() {
+export function connect() {
   // Use custom endpoint if set, otherwise build from host
   let endpoint = state.customEndpointUrl || buildWebSocketUrl();
 
@@ -218,7 +222,7 @@ function connect() {
   }
 }
 
-function disconnect() {
+export function disconnect() {
   if (state.websocket) {
     state.websocket.close();
     state.websocket = null;
@@ -232,7 +236,7 @@ function disconnect() {
   log('info', 'Disconnected');
 }
 
-function updateConnectionUI(status) {
+export function updateConnectionUI(status) {
   const statusEl = elements.connectionStatus;
   const textEl = statusEl.querySelector('.status-text');
   const dotEl = statusEl.querySelector('.status-dot');
@@ -262,7 +266,7 @@ function updateConnectionUI(status) {
  * Update toggle button text and style based on connection state
  * @param {boolean} isConnected - Whether currently connected
  */
-function updateToggleButton(isConnected) {
+export function updateToggleButton(isConnected) {
   const btn = elements.connectionToggleBtn;
   const iconEl = btn.querySelector('.btn-icon');
   const textEl = btn.querySelector('.btn-text');

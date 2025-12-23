@@ -2,11 +2,14 @@
  * Tools Module
  * Tool loading, rendering, and execution
  */
+import { state, elements } from './state.js';
+import { log, getToolIcon, formatToolName, formatFieldName, showLoading, hideLoading, displayRequest } from './ui-utils.js';
+import { sendRequest } from './mcp-protocol.js';
 
 // ============================================
 // No Tools Message
 // ============================================
-function showNoToolsMessage() {
+export function showNoToolsMessage() {
   elements.toolNav.innerHTML = `
     <div class="no-tools-message flex flex-col items-center justify-center p-6 text-center text-zinc-500">
       <span class="no-tools-icon text-4xl mb-3 opacity-50">🔌</span>
@@ -24,7 +27,7 @@ function showNoToolsMessage() {
 // ============================================
 // Fetch Tools
 // ============================================
-function fetchTools() {
+export function fetchTools() {
   log('info', 'Fetching available tools...');
   sendRequest('tools/list', {}).then(result => {
     const tools = result.tools || [];
@@ -46,7 +49,7 @@ function fetchTools() {
 // ============================================
 // Tool Selection
 // ============================================
-function selectTool(index) {
+export function selectTool(index) {
   state.selectedToolIndex = index;
 
   elements.toolNav.querySelectorAll('.tool-btn').forEach((btn, i) => {
@@ -63,7 +66,7 @@ function selectTool(index) {
 // ============================================
 // Render Tools List
 // ============================================
-function renderToolsList(tools) {
+export function renderToolsList(tools) {
   elements.toolNav.innerHTML = tools.map((tool, index) => `
     <button class="tool-btn w-full flex flex-row items-start gap-2 p-3 rounded-lg hover:bg-[#1c1c26] transition-all text-left group ${index === 0 ? 'active' : ''}" data-tool-index="${index}">
       <span class="tool-icon text-2xl mb-1">${getToolIcon(tool.name)}</span>
@@ -85,7 +88,7 @@ function renderToolsList(tools) {
 // ============================================
 // Render Tool Form
 // ============================================
-function renderToolForm(tool) {
+export function renderToolForm(tool) {
   const inputSchema = tool.inputSchema || {};
   const properties = inputSchema.properties || {};
   const required = inputSchema.required || [];
@@ -131,7 +134,7 @@ function renderToolForm(tool) {
 // ============================================
 // Render Form Field
 // ============================================
-function renderFormField(id, name, schema) {
+export function renderFormField(id, name, schema) {
   const type = schema.type || 'string';
   const defaultValue = schema.default !== undefined ? schema.default : '';
   const baseInputClass = "w-full px-4 py-2.5 bg-[#1c1c26] border border-white/10 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-indigo-500/50 focus:shadow-[0_0_20px_rgba(99,102,241,0.2)] transition-all placeholder:text-zinc-600";
@@ -177,7 +180,7 @@ function renderFormField(id, name, schema) {
 // ============================================
 // Execute Tool
 // ============================================
-function executeSelectedTool() {
+export function executeSelectedTool() {
   const tool = state.tools[state.selectedToolIndex];
   if (!tool) {
     log('error', 'No tool selected');
@@ -206,7 +209,7 @@ function executeSelectedTool() {
 // ============================================
 // Collect Form Arguments
 // ============================================
-function collectFormArguments(tool) {
+export function collectFormArguments(tool) {
   const inputSchema = tool.inputSchema || {};
   const properties = inputSchema.properties || {};
   const required = inputSchema.required || [];

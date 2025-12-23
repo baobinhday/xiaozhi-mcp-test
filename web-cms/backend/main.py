@@ -74,13 +74,13 @@ def main():
 ║                    MCP Endpoints CMS Server                      ║
 ║                      (Powered by FastAPI)                        ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  Admin Interface: http://localhost:{HTTP_PORT:<5}                        ║
+║  Admin Interface: http://localhost:{HTTP_PORT:<5}                ║
 ║                                                                  ║
 ║  Default credentials:                                            ║
-║    Username: {CMS_USERNAME:<20}                             ║
-║    Password: {'*' * min(len(CMS_PASSWORD), 10):<20}                             ║
+║    Username: {CMS_USERNAME:<20}                                  ║
+║    Password: {'*' * min(len(CMS_PASSWORD), 10):<20}              ║
 ║                                                                  ║
-║  Set CMS_USERNAME, CMS_PASSWORD in .env to change               ║
+║  Set CMS_USERNAME, CMS_PASSWORD in .env to change                ║
 ╚══════════════════════════════════════════════════════════════════╝
 """)
     

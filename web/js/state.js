@@ -6,7 +6,7 @@
 // ============================================
 // Global State
 // ============================================
-const state = {
+export const state = {
   websocket: null,
   isConnected: false,
   mcpConnected: false,
@@ -36,7 +36,7 @@ const state = {
 // ============================================
 // DOM Elements
 // ============================================
-const elements = {
+export const elements = {
   connectionToggleBtn: document.getElementById('connection-toggle-btn'),
   copyEndpointBtn: document.getElementById('copy-endpoint-btn'),
   customEndpointBtn: document.getElementById('custom-endpoint-btn'),
@@ -64,13 +64,21 @@ const elements = {
   customEndpointModalClose: document.getElementById('custom-endpoint-modal-close'),
   customEndpointCancel: document.getElementById('custom-endpoint-cancel'),
   customEndpointConnect: document.getElementById('custom-endpoint-connect'),
-  customEndpointReset: document.getElementById('custom-endpoint-reset')
+  customEndpointReset: document.getElementById('custom-endpoint-reset'),
+  // Auth elements
+  loginView: document.getElementById('login-view'),
+  dashboardView: document.getElementById('dashboard-view'),
+  loginForm: document.getElementById('login-form'),
+  loginError: document.getElementById('login-error'),
+  logoutBtn: document.getElementById('logout-btn'),
+  loginUsername: document.getElementById('login-username'),
+  loginPassword: document.getElementById('login-password')
 };
 
 // ============================================
 // LocalStorage Persistence
 // ============================================
-function loadChatSettings() {
+export function loadChatSettings() {
   try {
     const saved = localStorage.getItem('chatSettings');
     if (saved) {
@@ -82,7 +90,7 @@ function loadChatSettings() {
   }
 }
 
-function saveChatSettings() {
+export function saveChatSettings() {
   try {
     localStorage.setItem('chatSettings', JSON.stringify(state.chatSettings));
   } catch (e) {
